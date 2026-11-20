@@ -1,0 +1,48 @@
+{
+  "agents": {
+    "defaults": {
+      "userTimezone": "{{TIMEZONE}}",
+      "model": {
+        "primary": "{{PRIMARY_MODEL}}"
+      },
+      "compaction": {
+        "enabled": true,
+        "mode": "safeguard",
+        "keepRecentTokens": 20000,
+        "memoryFlush": {
+          "enabled": true,
+          "softThresholdTokens": 8000
+        }
+      }
+    }
+  },
+  "tools": {
+    "profile": "full",
+    "web": {
+      "search": {
+        "enabled": true,
+        "provider": "duckduckgo"
+      }
+    }
+  },
+  "hooks": {
+    "internal": {
+      "enabled": true,
+      "entries": {
+        "session-memory": {
+          "enabled": true
+        }
+      }
+    }
+  },
+  "plugins": {
+    "entries": {
+      "telegram": {
+        "enabled": true
+      },
+      "duckduckgo": {
+        "enabled": true
+      }
+    }
+  }
+}

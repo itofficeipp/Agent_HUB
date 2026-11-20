@@ -1,0 +1,77 @@
+{
+  "name": "base",
+  "version": "0.1.0",
+  "title": "Nền tảng: cấu hình mặc định OpenClaw + file persona workspace",
+  "description": "Áp cấu hình mặc định an toàn (model, compaction, memory-flush, web search, hook session-memory) bằng 'openclaw config patch' và tạo AGENTS/SOUL/USER/IDENTITY cho workspace nếu chưa có. Không ghi bí mật.",
+  "requires": [],
+  "min_openclaw": "2026.10.9",
+  "params": [
+    {
+      "key": "COMPANY_NAME",
+      "prompt": "Tên công ty/đơn vị",
+      "required": true
+    },
+    {
+      "key": "OWNER_NAME",
+      "prompt": "Tên người chủ/quản trị (xưng hô)",
+      "required": true
+    },
+    {
+      "key": "ASSISTANT_NAME",
+      "prompt": "Tên trợ lý",
+      "default": "Javis"
+    },
+    {
+      "key": "TIMEZONE",
+      "prompt": "Múi giờ",
+      "default": "Asia/Ho_Chi_Minh",
+      "pattern": "[A-Za-z_]+/[A-Za-z_]+"
+    },
+    {
+      "key": "PRIMARY_MODEL",
+      "prompt": "Model chính (provider/model)",
+      "default": "anthropic/claude-sonnet-5-5",
+      "pattern": "[a-z0-9-]+/[A-Za-z0-9._:-]+"
+    },
+    {
+      "key": "WORKSPACE_DIR",
+      "prompt": "Thư mục workspace của agent chính",
+      "default": "~/.openclaw/workspace",
+      "pattern": "[^\\s]+"
+    }
+  ],
+  "files": [
+    {
+      "src": "templates/AGENTS.md.in",
+      "dest": "{{WORKSPACE_DIR}}/AGENTS.md",
+      "if_exists": "sidecar"
+    },
+    {
+      "src": "templates/SOUL.md.in",
+      "dest": "{{WORKSPACE_DIR}}/SOUL.md",
+      "if_exists": "sidecar"
+    },
+    {
+      "src": "templates/USER.md.in",
+      "dest": "{{WORKSPACE_DIR}}/USER.md",
+      "if_exists": "skip"
+    },
+    {
+      "src": "templates/IDENTITY.md.in",
+      "dest": "{{WORKSPACE_DIR}}/IDENTITY.md",
+      "if_exists": "skip"
+    }
+  ],
+  "config_patch": "templates/config.patch.json.in",
+  "checks": [
+    {
+      "name": "config hợp lệ",
+      "argv": [
+        "{{OPENCLAW_BIN}}",
+        "config",
+        "validate"
+      ],
+      "hint": "openclaw config validate báo lỗi: xem docs/UPDATING.md"
+    }
+  ]
+}

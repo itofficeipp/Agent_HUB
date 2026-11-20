@@ -1,0 +1,18 @@
+{
+ "description": "Mẫu cho công ty khác: server_prefix = tiền tố tên MCP server trong OpenClaw; scopes = phạm vi -> danh sách tên tool CHÍNH XÁC của MCP server; combined = tool cần đủ nhiều phạm vi ('a+b').",
+ "server_prefix": "cty_",
+ "scopes": {
+  "doc": [
+   "tool_doc_1",
+   "tool_doc_2"
+  ],
+  "viet": [
+   "tool_ghi_1"
+  ]
+ },
+ "combined": {
+  "doc+viet": [
+   "tool_can_ca_hai"
+  ]
+ }
+}

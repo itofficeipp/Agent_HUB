@@ -1,0 +1,8 @@
+title = "openclaw-kit"
+[extend]
+useDefault = true
+
+[allowlist]
+description = "mau/placeholder"
+regexes = ['''<REDACTED>''', '''dummy-key-123''', '''tokenmcp-secret-12345''', '''token[AB]{15,}''', '''hmac-secret-test''']
+paths = ['''tests/''']

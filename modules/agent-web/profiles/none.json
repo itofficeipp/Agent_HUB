@@ -1,0 +1,6 @@
+{
+ "description": "Không dùng MCP: webhook từ chối các trường mcp_*.",
+ "server_prefix": "mcp_",
+ "scopes": {},
+ "combined": {}
+}

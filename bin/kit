@@ -1,0 +1,319 @@
+#!/usr/bin/env python3
+"""kit - bộ triển khai OpenClaw nhiều nơi (đa tenant, chỉ Python stdlib).
+
+  kit init <tenant>              tạo tenant (công ty/máy) mới
+  kit modules                    liệt kê chức năng, trạng thái, bản mới
+  kit enable <module>            hỏi tham số, lưu (bí mật -> secrets.env chmod 600)
+  kit apply [module] [--dry-run] dựng cấu hình/dịch vụ từ mẫu (idempotent)
+  kit update [--with-openclaw]   git pull kit + (tuỳ chọn) update OpenClaw + migrations + apply + doctor
+  kit doctor                     kiểm tra môi trường và từng module
+  kit run <module> <lệnh> ...    lệnh riêng của module (vd agent-web add-caller)
+  kit export-config              xuất cấu hình máy hiện tại đã che bí mật (để xem/đưa vào mẫu)
+"""
+import argparse, datetime, getpass, json, os, re, secrets, shutil, stat, subprocess, sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+USER_HOME = Path(os.environ.get("KIT_USER_HOME", str(Path.home())))
+CFG = Path(os.environ.get("KIT_HOME", str(USER_HOME / ".config" / "openclaw-kit")))
+OC = os.environ.get("OPENCLAW_BIN", "openclaw")
+VERSION = (ROOT / "VERSION").read_text().strip()
+
+def die(msg, rc=1):
+    print("LOI:", msg, file=sys.stderr); sys.exit(rc)
+
+def now(): return datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+
+# ---------- tenant / params ----------
+def tenants_dir(): return CFG / "tenants"
+def current_tenant(arg):
+    if arg: return arg
+    f = CFG / "current"
+    if f.exists(): return f.read_text().strip()
+    ts = sorted(p.name for p in tenants_dir().glob("*")) if tenants_dir().exists() else []
+    if len(ts) == 1: return ts[0]
+    die("chưa chọn tenant: dùng --tenant NAME hoặc 'kit init NAME'")
+def tdir(t): return tenants_dir() / t
+def read_json(p, default):
+    return json.loads(Path(p).read_text()) if Path(p).exists() else default
+def write_private(p, text):
+    p = Path(p); p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_suffix(p.suffix + ".tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f: f.write(text)
+    os.replace(tmp, p)
+def load_secrets(t):
+    d = {}; p = tdir(t) / "secrets.env"
+    if p.exists():
+        for l in p.read_text().splitlines():
+            if "=" in l and not l.lstrip().startswith("#"):
+                k, v = l.split("=", 1); d[k.strip()] = v.strip()
+    return d
+def save_secrets(t, d):
+    write_private(tdir(t) / "secrets.env", "".join(f"{k}={v}\n" for k, v in sorted(d.items())))
+def load_params(t): return read_json(tdir(t) / "params.json", {})
+def save_params(t, d):
+    p = tdir(t) / "params.json"; p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(d, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
+def load_state(t): return read_json(tdir(t) / "state.json", {"enabled": [], "applied": {}, "migrations": []})
+def save_state(t, s): (tdir(t) / "state.json").write_text(json.dumps(s, indent=2, sort_keys=True) + "\n")
+
+# ---------- modules ----------
+def module_names():
+    return sorted(p.name for p in (ROOT / "modules").iterdir() if (p / "module.json").exists())
+def manifest(name):
+    p = ROOT / "modules" / name / "module.json"
+    if not p.exists(): die(f"không có module '{name}' (xem: kit modules)")
+    return json.loads(p.read_text())
+def with_deps(names, seen=None):
+    out = []
+    def visit(n):
+        if n in out: return
+        for d in manifest(n).get("requires", []): visit(d)
+        out.append(n)
+    for n in names: visit(n)
+    return out
+
+def default_value(spec):
+    d = spec.get("default", "")
+    if isinstance(d, str) and d.startswith("random:hex"):
+        return secrets.token_hex(int(d[10:] or 4))
+    if isinstance(d, str) and d.startswith("random:token"):
+        return secrets.token_urlsafe(int(d[12:] or 24))
+    return d
+
+def cond_ok(item, get):
+    """item có thể mang 'when': {KEY: giá trị | [giá trị...]}; chỉ áp dụng khi mọi điều kiện đúng."""
+    for k, want in (item.get("when") or {}).items():
+        want = want if isinstance(want, list) else [want]
+        if str(get(k) or "") not in [str(w) for w in want]: return False
+    return True
+
+def probe_healthz(url):
+    """Kiểm nhanh <url>/healthz (n8n trả ok). Chỉ cảnh báo, không chặn: máy có thể chưa bật n8n."""
+    import urllib.request
+    try:
+        with urllib.request.urlopen(urllib.request.Request(url.rstrip("/") + "/healthz", headers={"User-Agent": "curl/8.5.0"}), timeout=8) as r:
+            print(f"    OK {url}/healthz trả {r.status}")
+    except Exception as e:
+        print(f"    CẢNH BÁO: chưa gọi được {url}/healthz ({str(e)[:100]}). Kiểm DNS/tunnel/firewall; vẫn lưu tham số.")
+
+def collect_params(t, mods, sets, interactive):
+    params, sec = load_params(t), load_secrets(t)
+    getv = lambda k: sets.get(k, params.get(k, sec.get(k)))
+    for m in mods:
+        for spec in manifest(m).get("params", []):
+            k = spec["key"]; is_sec = spec.get("secret", False)
+            have = sec if is_sec else params
+            if not cond_ok(spec, getv): continue
+            dv0 = default_value(spec); dis = spec.get("default_if_set")
+            if dis and getv(dis["key"]): dv0 = dis["value"]   # tenant cũ: đã có khoá này thì giữ hành vi cũ
+            if k in sets: val = sets[k]
+            elif k in have and have[k] != "": continue
+            elif os.environ.get("KIT_" + k): val = os.environ["KIT_" + k]
+            elif interactive:
+                dv = dv0
+                prompt = f"[{m}] {spec['prompt']}" + (f" [{'ẩn' if is_sec else dv}]" if (dv or is_sec) else "") + ": "
+                val = (getpass.getpass(prompt) if is_sec else input(prompt)).strip() or dv
+            else: val = dv0
+            if val == "" and spec.get("required", True) and not spec.get("optional"):
+                die(f"thiếu tham số {k} ({spec['prompt']}); dùng --set {k}=... hoặc chạy tương tác")
+            pat = spec.get("pattern")
+            if val != "" and pat and not re.fullmatch(pat, val):
+                die(f"{k} sai định dạng (cần khớp {pat})")
+            (sec if is_sec else params)[k] = val
+            if val and spec.get("probe") == "healthz" and interactive and not os.environ.get("KIT_NO_PROBE"): probe_healthz(val)
+    save_params(t, params); save_secrets(t, sec)
+    return params, sec
+
+def context(t):
+    c = {"HOME": str(USER_HOME), "KIT_ROOT": str(ROOT), "TENANT": t, "TENANT_DIR": str(tdir(t)),
+         "OPENCLAW_BIN": OC, "KIT_VERSION": VERSION, "KIT_HOME_DIR": str(CFG)}
+    c.update(load_params(t)); c.update(load_secrets(t))
+    from urllib.parse import urlparse
+    for k, host_k in (("AW_PUBLIC_URL", "AW_PUBLIC_HOST"), ("N8N_PUBLIC_URL", "N8N_PUBLIC_HOST")):
+        if c.get(k): c[host_k] = urlparse(c[k]).hostname or ""
+    if c.get("N8N_PUBLIC_URL"):
+        https = urlparse(c["N8N_PUBLIC_URL"]).scheme == "https"
+        c["N8N_PROTOCOL"] = "https" if https else "http"; c["N8N_SECURE_COOKIE"] = "true" if https else "false"
+    return c
+
+def render(text, ctx, where=""):
+    def sub(m):
+        k = m.group(1)
+        if k not in ctx: die(f"mẫu {where} dùng {{{{{k}}}}} nhưng chưa có tham số (chạy 'kit enable')")
+        return str(ctx[k])
+    return re.sub(r"\{\{([A-Z0-9_]+)\}\}", sub, text)
+
+# ---------- openclaw helpers ----------
+def oc_available(): return shutil.which(OC) is not None
+def oc_patch(patch_text, dry):
+    if not oc_available():
+        print("  ! không thấy openclaw trong PATH — bỏ qua config patch (chạy lại sau khi cài OpenClaw)"); return True
+    args = [OC, "config", "patch", "--stdin"] + (["--dry-run"] if dry else [])
+    r = subprocess.run(args, input=patch_text, capture_output=True, text=True)
+    if r.returncode != 0: print(r.stdout + r.stderr); return False
+    return True
+def backup_openclaw_config():
+    src = USER_HOME / ".openclaw" / "openclaw.json"
+    if src.exists():
+        dst = CFG / "backups" / f"openclaw.json.{now()}"; dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dst); os.chmod(dst, 0o600); return dst
+
+# ---------- apply ----------
+def apply_module(t, name, ctx, dry):
+    man = manifest(name); mdir = ROOT / "modules" / name
+    print(f"== {name} v{man['version']}" + (" (dry-run)" if dry else ""))
+    stamp = now(); bk = CFG / "backups" / f"files.{stamp}"
+    for f in man.get("files", []):
+        if not cond_ok(f, ctx.get): continue
+        src = mdir / render(f["src"], ctx, f["src"]); dest = Path(render(f["dest"], ctx, f["dest"])).expanduser()
+        if not src.exists(): die(f"module {name}: thiếu file nguồn {src.relative_to(ROOT)}")
+        txt = src.read_text()
+        if f.get("render", True): txt = render(txt, ctx, f["src"])
+        mode = int(f.get("mode", "0644"), 8); policy = f.get("if_exists", "replace")
+        if dest.exists():
+            if dest.read_text() == txt: print(f"  = {dest} (không đổi)"); continue
+            if policy == "skip": print(f"  - {dest} đã có, giữ nguyên"); continue
+            if policy == "sidecar":
+                dest2 = dest.with_name(dest.name + ".kit-new"); print(f"  ~ {dest} đã có -> ghi bản mới ở {dest2.name}")
+                dest = dest2
+        print(f"  + {dest}")
+        if dry: continue
+        if dest.exists():
+            b = bk / dest.name; b.parent.mkdir(parents=True, exist_ok=True); shutil.copy2(dest, b)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        if mode & 0o077 == 0: write_private(dest, txt)
+        else: dest.write_text(txt)
+        os.chmod(dest, mode)
+    if "config_patch" in man:
+        patch = render((mdir / man["config_patch"]).read_text(), ctx, man["config_patch"])
+        try: json.loads(patch)
+        except ValueError as e: die(f"config_patch của {name} không phải JSON hợp lệ sau khi render: {e}")
+        print("  ~ openclaw config patch (kiểm schema trước)")
+        if not oc_patch(patch, True): die(f"OpenClaw từ chối config patch của {name} (schema đổi? xem docs/UPDATING.md)")
+        if not dry:
+            b = backup_openclaw_config()
+            if b: print(f"    sao lưu config -> {b}")
+            if not oc_patch(patch, False): die(f"ghi config patch của {name} thất bại")
+    for cmd in man.get("post_apply", []):
+        if isinstance(cmd, dict):
+            if not cond_ok(cmd, ctx.get): continue
+            cmd = cmd["argv"]
+        argv = [render(a, ctx, "post_apply") for a in cmd]
+        print("  $ " + " ".join(argv) + ("  (bỏ qua: dry-run)" if dry else ""))
+        if not dry:
+            r = subprocess.run(argv, env=dict(os.environ, KIT_TENANT=t, KIT_HOME=str(CFG), KIT_ROOT=str(ROOT)))
+            if r.returncode != 0: die(f"post_apply thất bại rc={r.returncode}: {argv[0]}")
+    return man["version"]
+
+def cmd_init(a):
+    t = a.name
+    if not re.fullmatch(r"[a-z0-9][a-z0-9_-]{1,30}", t): die("tên tenant: a-z 0-9 _ - (2-31 ký tự)")
+    tdir(t).mkdir(parents=True, exist_ok=True); os.chmod(tdir(t), 0o700)
+    save_params(t, load_params(t)); save_state(t, load_state(t))
+    (CFG / "current").write_text(t + "\n")
+    print(f"Đã tạo tenant '{t}' tại {tdir(t)}\nBước tiếp: kit enable base   (rồi: kit enable agent-web)")
+
+def cmd_modules(a):
+    t = a.tenant or ((CFG / "current").read_text().strip() if (CFG / "current").exists() else None)
+    st = load_state(t) if t else {"enabled": [], "applied": {}}
+    print(f"kit {VERSION}   tenant: {t or '(chưa có)'}")
+    for n in module_names():
+        m = manifest(n); en = n in st["enabled"]; ap = st["applied"].get(n)
+        flag = "BẬT " if en else "tắt "
+        note = "" if not en else (" (chưa apply)" if not ap else (f" (có bản mới {m['version']} > đã apply {ap}: chạy 'kit apply')" if ap != m["version"] else f" đã apply v{ap}"))
+        print(f"  [{flag}] {n:<12} v{m['version']:<7} {m['title']}{note}")
+
+def cmd_enable(a):
+    t = current_tenant(a.tenant); mods = with_deps([a.module])
+    sets = dict(s.split("=", 1) for s in (a.set or []))
+    if a.params_file:
+        for k, v in json.loads(Path(a.params_file).read_text()).items(): sets.setdefault(k, str(v))
+    collect_params(t, mods, sets, interactive=not a.yes and sys.stdin.isatty())
+    st = load_state(t)
+    for m in mods:
+        if m not in st["enabled"]: st["enabled"].append(m)
+    save_state(t, st); print(f"Đã bật: {', '.join(mods)}. Chạy 'kit apply --dry-run' để xem trước, 'kit apply' để dựng.")
+
+def cmd_apply(a):
+    t = current_tenant(a.tenant); st = load_state(t)
+    mods = with_deps(a.module and [a.module] or st["enabled"])
+    for m in mods:
+        if m not in st["enabled"]: die(f"module '{m}' chưa bật (kit enable {m})")
+    collect_params(t, mods, {}, interactive=False)
+    ctx = context(t)
+    for m in mods:
+        v = apply_module(t, m, ctx, a.dry_run)
+        if not a.dry_run: st["applied"][m] = v
+    if not a.dry_run: save_state(t, st); print("XONG. Kiểm tra: kit doctor")
+
+def run(cmd, **kw): return subprocess.run(cmd, capture_output=True, text=True, **kw)
+def cmd_update(a):
+    t = current_tenant(a.tenant)
+    if (ROOT / ".git").exists():
+        print("== git pull kit"); r = run(["git", "-C", str(ROOT), "pull", "--ff-only"]); print(r.stdout + r.stderr)
+        if r.returncode != 0: die("git pull thất bại (có sửa tay trong kit? commit/stash rồi chạy lại)")
+    if a.with_openclaw:
+        print("== openclaw update"); r = subprocess.run([OC, "update", "--yes"])
+        if r.returncode != 0: die("openclaw update thất bại; kit chưa apply gì thêm")
+    st = load_state(t); done = set(st.get("migrations", []))
+    for p in sorted((ROOT / "migrations").glob("[0-9][0-9][0-9][0-9]_*.py")):
+        if p.name in done: continue
+        print(f"== migration {p.name}"); r = subprocess.run([sys.executable, str(p)], env=dict(os.environ, KIT_TENANT=t, KIT_HOME=str(CFG), KIT_ROOT=str(ROOT)))
+        if r.returncode != 0: die(f"migration {p.name} lỗi rc={r.returncode}")
+        st["migrations"].append(p.name); save_state(t, st)
+    a.module = None; a.dry_run = False; cmd_apply(a); cmd_doctor(a)
+
+def cmd_doctor(a):
+    t = current_tenant(a.tenant); bad = 0
+    def chk(ok, msg, hint=""):
+        nonlocal bad; print(("  OK   " if ok else "  LOI  ") + msg + ("" if ok else f"  -> {hint}")); bad += (not ok)
+    print(f"kit {VERSION} / tenant {t}")
+    chk(sys.version_info >= (3, 9), f"python {sys.version.split()[0]}", "cần >= 3.9")
+    nv = run(["node", "-v"]).stdout.strip() if shutil.which("node") else ""
+    chk(bool(nv), f"node {nv or '(thiếu)'}", "cài Node theo docs OpenClaw")
+    if oc_available():
+        v = run([OC, "--version"]).stdout.strip(); chk(True, f"openclaw {v}")
+        r = run([OC, "config", "validate"]); chk(r.returncode == 0, "openclaw config validate", (r.stdout + r.stderr).strip()[-200:])
+    else: chk(False, "openclaw", "cài: curl -fsSL https://openclaw.ai/install.sh | bash")
+    sp = tdir(t) / "secrets.env"
+    if sp.exists(): chk(stat.S_IMODE(sp.stat().st_mode) == 0o600, "secrets.env chmod 600", f"chmod 600 {sp}")
+    st = load_state(t)
+    for n in st["enabled"]:
+        m = manifest(n)
+        if m.get("min_openclaw") and oc_available():
+            pass  # so sánh phiên bản chi tiết để module tự kiểm trong 'checks'
+        for c in m.get("checks", []):
+            if not cond_ok(c, context(t).get): continue
+            argv = [render(x, context(t), "checks") for x in c["argv"]]
+            try: r = run(argv, timeout=60); ok = r.returncode == 0; out = (r.stdout + r.stderr).strip()[-160:]
+            except Exception as e: ok, out = False, str(e)
+            chk(ok, f"[{n}] {c['name']}", render(c["hint"], context(t), "hint") if c.get("hint") else out)
+            if not ok and out and c.get("hint"): print("       " + out.replace("\n", "\n       "))
+    print("Tất cả OK" if not bad else f"{bad} mục lỗi"); return bad
+
+def cmd_run(a):
+    t = current_tenant(a.tenant); man = manifest(a.module)
+    spec = man.get("commands", {}).get(a.command)
+    if not spec: die(f"module {a.module} không có lệnh '{a.command}' (có: {', '.join(man.get('commands', {}))})")
+    ctx = context(t); argv = [render(x, ctx, "commands") for x in spec["argv"]] + a.args
+    sys.exit(subprocess.run(argv, env=dict(os.environ, KIT_TENANT=t, KIT_HOME=str(CFG), KIT_ROOT=str(ROOT))).returncode)
+
+def cmd_export(a):
+    sys.exit(subprocess.run([sys.executable, str(ROOT / "tools" / "export_config.py")] + a.args).returncode)
+
+def main():
+    p = argparse.ArgumentParser(prog="kit", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument("--tenant"); sp = p.add_subparsers(dest="cmd", required=True)
+    s = sp.add_parser("init"); s.add_argument("name"); s.set_defaults(f=cmd_init)
+    s = sp.add_parser("modules"); s.set_defaults(f=cmd_modules)
+    s = sp.add_parser("enable"); s.add_argument("module"); s.add_argument("--set", action="append"); s.add_argument("--params-file", help="JSON tham số KHÔNG bí mật (xem examples/)"); s.add_argument("--yes", action="store_true"); s.set_defaults(f=cmd_enable)
+    s = sp.add_parser("apply"); s.add_argument("module", nargs="?"); s.add_argument("--dry-run", action="store_true"); s.set_defaults(f=cmd_apply)
+    s = sp.add_parser("update"); s.add_argument("--with-openclaw", action="store_true"); s.set_defaults(f=cmd_update)
+    s = sp.add_parser("doctor"); s.set_defaults(f=cmd_doctor)
+    s = sp.add_parser("run"); s.add_argument("module"); s.add_argument("command"); s.add_argument("args", nargs=argparse.REMAINDER); s.set_defaults(f=cmd_run)
+    s = sp.add_parser("export-config"); s.add_argument("args", nargs=argparse.REMAINDER); s.set_defaults(f=cmd_export)
+    a = p.parse_args(); a.f(a)
+
+if __name__ == "__main__": main()

@@ -1,0 +1,516 @@
+{
+  "name": "agent-web",
+  "version": "0.2.0",
+  "title": "Tạo nhân viên từ hệ thống web: agent riêng + bot Telegram riêng + MCP riêng (receiver tích hợp hoặc n8n -> Gateway)",
+  "description": "Hệ thống ngoài (web/HRM) gọi webhook (Basic auth + HMAC + chống gửi lại) để tạo 'nhân viên'. Mặc định receiver tích hợp (Python, SQLite) không cần n8n; tuỳ chọn dùng workflow n8n. Orchestrator tạo agent sandbox riêng trên Gateway, gắn bot Telegram và MCP riêng. Token bot/MCP mã hoá RSA-OAEP, máy nhận không giữ bản rõ. Tuỳ chọn: Cloudflare Tunnel hoặc mở port; thống kê token theo người.",
+  "requires": [
+    "base"
+  ],
+  "min_openclaw": "2026.10.9",
+  "params": [
+    {
+      "key": "AW_BACKEND",
+      "prompt": "Nơi nhận webhook: local (receiver tích hợp, không cần n8n) hoặc n8n",
+      "default": "local",
+      "default_if_set": {
+        "key": "AW_N8N_URL",
+        "value": "n8n"
+      },
+      "pattern": "local|n8n"
+    },
+    {
+      "key": "AW_N8N_URL",
+      "prompt": "URL n8n (https://n8n.congty.com)",
+      "pattern": "https?://[A-Za-z0-9.:-]+(/[^\\s]*)?",
+      "when": {
+        "AW_BACKEND": "n8n"
+      },
+      "probe": "healthz"
+    },
+    {
+      "key": "AW_N8N_API_KEY",
+      "prompt": "n8n API key",
+      "secret": true,
+      "when": {
+        "AW_BACKEND": "n8n"
+      }
+    },
+    {
+      "key": "AW_WEBHOOK_PATH",
+      "prompt": "Đường dẫn webhook (bí mật, ngẫu nhiên)",
+      "default": "random:hex12",
+      "pattern": "[A-Za-z0-9_-]{8,64}"
+    },
+    {
+      "key": "AW_WORKFLOW_NAME",
+      "prompt": "Tên workflow n8n",
+      "default": "Tool Openclaw - Agent Web Tạo user",
+      "when": {
+        "AW_BACKEND": "n8n"
+      }
+    },
+    {
+      "key": "AW_REGISTRY_TABLE_ID",
+      "prompt": "ID n8n Data table 'agent_registry' (để trống rồi chạy: kit run agent-web tables)",
+      "pattern": "[A-Za-z0-9]{6,40}",
+      "required": false,
+      "optional": true,
+      "default": "",
+      "when": {
+        "AW_BACKEND": "n8n"
+      }
+    },
+    {
+      "key": "AW_CHANNEL_TABLE_ID",
+      "prompt": "ID n8n Data table 'agent_kenh'",
+      "pattern": "[A-Za-z0-9]{6,40}",
+      "required": false,
+      "optional": true,
+      "default": "",
+      "when": {
+        "AW_BACKEND": "n8n"
+      }
+    },
+    {
+      "key": "AW_ERROR_WORKFLOW_ID",
+      "prompt": "ID workflow báo lỗi n8n (tuỳ chọn)",
+      "required": false,
+      "optional": true,
+      "default": "",
+      "when": {
+        "AW_BACKEND": "n8n"
+      }
+    },
+    {
+      "key": "AW_LISTEN_PORT",
+      "prompt": "Cổng receiver (chỉ nghe 127.0.0.1)",
+      "default": "8787",
+      "pattern": "[1-9][0-9]{2,4}",
+      "when": {
+        "AW_BACKEND": "local"
+      }
+    },
+    {
+      "key": "AW_EXPOSE",
+      "prompt": "Cách đưa receiver ra Internet: tunnel (Cloudflare Tunnel, không mở port) | port (mở 80/443 + Caddy) | none (chỉ LAN/VPN)",
+      "default": "tunnel",
+      "pattern": "tunnel|port|none",
+      "when": {
+        "AW_BACKEND": "local"
+      }
+    },
+    {
+      "key": "AW_PUBLIC_URL",
+      "prompt": "Địa chỉ công khai web bên ngoài gọi vào (https://agents.congty.vn)",
+      "pattern": "https://[A-Za-z0-9.-]+(:[0-9]{2,5})?",
+      "when": {
+        "AW_BACKEND": "local",
+        "AW_EXPOSE": [
+          "tunnel",
+          "port"
+        ]
+      }
+    },
+    {
+      "key": "AW_GATEWAY_ID",
+      "prompt": "Mã Gateway chạy các agent này",
+      "default": "gw1",
+      "pattern": "[a-z0-9_-]{2,20}"
+    },
+    {
+      "key": "AW_GATEWAY_SSH",
+      "prompt": "Máy Gateway: 'local' hoặc user@host (SSH khoá, không mật khẩu)",
+      "default": "local",
+      "pattern": "local|[A-Za-z0-9_.-]+@[A-Za-z0-9_.-]+"
+    },
+    {
+      "key": "AW_GATEWAY_SSH_KEY",
+      "prompt": "Khoá SSH tới Gateway (bỏ trống nếu local)",
+      "required": false,
+      "optional": true,
+      "default": ""
+    },
+    {
+      "key": "AW_GATEWAY_DIR",
+      "prompt": "Thư mục script trên Gateway",
+      "default": "~/openclaw-kit-agentweb",
+      "pattern": "[~A-Za-z0-9_./-]+"
+    },
+    {
+      "key": "AW_AGENT_ROOT",
+      "prompt": "Thư mục workspace các agent trên Gateway",
+      "default": "/srv/agents",
+      "pattern": "/[A-Za-z0-9_./-]+"
+    },
+    {
+      "key": "AW_MCP_PROFILE",
+      "prompt": "Hồ sơ MCP (example | none | tên file trong profiles/)",
+      "default": "none",
+      "pattern": "[a-z0-9_-]+"
+    },
+    {
+      "key": "AW_ALERT_CHANNEL",
+      "prompt": "Kênh báo lỗi",
+      "default": "telegram"
+    },
+    {
+      "key": "AW_ALERT_TARGET",
+      "prompt": "Người/nhóm nhận báo lỗi (chat id; trống = chỉ ghi log)",
+      "required": false,
+      "optional": true,
+      "default": ""
+    },
+    {
+      "key": "AW_STATS",
+      "prompt": "Bật thống kê token theo người (yes/no)",
+      "default": "no",
+      "pattern": "yes|no"
+    },
+    {
+      "key": "AW_STATS_TARGET",
+      "prompt": "Nhận báo cáo token (chat id; trống = chỉ ghi CSV)",
+      "required": false,
+      "optional": true,
+      "default": "",
+      "when": {
+        "AW_STATS": "yes"
+      }
+    },
+    {
+      "key": "AW_STATS_TIME",
+      "prompt": "Giờ gửi báo cáo hằng ngày (HH:MM)",
+      "default": "08:00",
+      "pattern": "([01][0-9]|2[0-3]):[0-5][0-9]",
+      "when": {
+        "AW_STATS": "yes"
+      }
+    },
+    {
+      "key": "AW_AUTOSTART",
+      "prompt": "Bật timer provision ngay (yes/no)",
+      "default": "no",
+      "pattern": "yes|no"
+    }
+  ],
+  "files": [
+    {
+      "src": "orchestrator/awconf.py",
+      "dest": "{{TENANT_DIR}}/agent-web/orchestrator/awconf.py",
+      "render": false,
+      "mode": "0755"
+    },
+    {
+      "src": "orchestrator/provision.py",
+      "dest": "{{TENANT_DIR}}/agent-web/orchestrator/provision.py",
+      "render": false,
+      "mode": "0755"
+    },
+    {
+      "src": "orchestrator/provision_tick.py",
+      "dest": "{{TENANT_DIR}}/agent-web/orchestrator/provision_tick.py",
+      "render": false,
+      "mode": "0755"
+    },
+    {
+      "src": "orchestrator/add_caller.py",
+      "dest": "{{TENANT_DIR}}/agent-web/orchestrator/add_caller.py",
+      "render": false,
+      "mode": "0755"
+    },
+    {
+      "src": "orchestrator/keygen.py",
+      "dest": "{{TENANT_DIR}}/agent-web/orchestrator/keygen.py",
+      "render": false,
+      "mode": "0755"
+    },
+    {
+      "src": "orchestrator/deploy_gateway.py",
+      "dest": "{{TENANT_DIR}}/agent-web/orchestrator/deploy_gateway.py",
+      "render": false,
+      "mode": "0755"
+    },
+    {
+      "src": "orchestrator/build_workflow.py",
+      "dest": "{{TENANT_DIR}}/agent-web/orchestrator/build_workflow.py",
+      "render": false,
+      "mode": "0755",
+      "when": {
+        "AW_BACKEND": "n8n"
+      }
+    },
+    {
+      "src": "orchestrator/deploy_workflow.py",
+      "dest": "{{TENANT_DIR}}/agent-web/orchestrator/deploy_workflow.py",
+      "render": false,
+      "mode": "0755",
+      "when": {
+        "AW_BACKEND": "n8n"
+      }
+    },
+    {
+      "src": "orchestrator/n8n_tables.py",
+      "dest": "{{TENANT_DIR}}/agent-web/orchestrator/n8n_tables.py",
+      "render": false,
+      "mode": "0755",
+      "when": {
+        "AW_BACKEND": "n8n"
+      }
+    },
+    {
+      "src": "orchestrator/test_webhook.py",
+      "dest": "{{TENANT_DIR}}/agent-web/orchestrator/test_webhook.py",
+      "render": false,
+      "mode": "0755"
+    },
+    {
+      "src": "orchestrator/post_apply.sh",
+      "dest": "{{TENANT_DIR}}/agent-web/orchestrator/post_apply.sh",
+      "render": false,
+      "mode": "0755"
+    },
+    {
+      "src": "gateway/create_agent.sh",
+      "dest": "{{TENANT_DIR}}/agent-web/gateway/create_agent.sh",
+      "render": false,
+      "mode": "0755"
+    },
+    {
+      "src": "gateway/gan_kenh.sh",
+      "dest": "{{TENANT_DIR}}/agent-web/gateway/gan_kenh.sh",
+      "render": false,
+      "mode": "0755"
+    },
+    {
+      "src": "gateway/gan_mcp.py",
+      "dest": "{{TENANT_DIR}}/agent-web/gateway/gan_mcp.py",
+      "render": false,
+      "mode": "0755"
+    },
+    {
+      "src": "profiles/{{AW_MCP_PROFILE}}.json",
+      "dest": "{{TENANT_DIR}}/agent-web/mcp_profile.json",
+      "render": false,
+      "mode": "0600"
+    },
+    {
+      "src": "orchestrator/store.py",
+      "dest": "{{TENANT_DIR}}/agent-web/orchestrator/store.py",
+      "render": false,
+      "mode": "0755"
+    },
+    {
+      "src": "orchestrator/receiver.py",
+      "dest": "{{TENANT_DIR}}/agent-web/orchestrator/receiver.py",
+      "render": false,
+      "mode": "0755"
+    },
+    {
+      "src": "orchestrator/check_listen.py",
+      "dest": "{{TENANT_DIR}}/agent-web/orchestrator/check_listen.py",
+      "render": false,
+      "mode": "0755"
+    },
+    {
+      "src": "orchestrator/check_public.py",
+      "dest": "{{TENANT_DIR}}/agent-web/orchestrator/check_public.py",
+      "render": false,
+      "mode": "0755"
+    },
+    {
+      "src": "orchestrator/token_stats.py",
+      "dest": "{{TENANT_DIR}}/agent-web/orchestrator/token_stats.py",
+      "render": false,
+      "mode": "0755"
+    },
+    {
+      "src": "templates/receiver.service.in",
+      "dest": "{{HOME}}/.config/systemd/user/openclaw-kit-agentweb-receiver.service",
+      "when": {
+        "AW_BACKEND": "local"
+      }
+    },
+    {
+      "src": "templates/stats.service.in",
+      "dest": "{{HOME}}/.config/systemd/user/openclaw-kit-agentweb-stats.service",
+      "when": {
+        "AW_STATS": "yes"
+      }
+    },
+    {
+      "src": "templates/stats.timer.in",
+      "dest": "{{HOME}}/.config/systemd/user/openclaw-kit-agentweb-stats.timer",
+      "when": {
+        "AW_STATS": "yes"
+      }
+    },
+    {
+      "src": "templates/provision.service.in",
+      "dest": "{{HOME}}/.config/systemd/user/openclaw-kit-agentweb-provision.service"
+    },
+    {
+      "src": "templates/provision.timer.in",
+      "dest": "{{HOME}}/.config/systemd/user/openclaw-kit-agentweb-provision.timer"
+    },
+    {
+      "src": "templates/cloudflared-config.yml.in",
+      "dest": "{{TENANT_DIR}}/agent-web/expose/cloudflared-config.yml",
+      "mode": "0600",
+      "when": {
+        "AW_BACKEND": "local",
+        "AW_EXPOSE": "tunnel"
+      }
+    },
+    {
+      "src": "templates/Caddyfile.in",
+      "dest": "{{TENANT_DIR}}/agent-web/expose/Caddyfile",
+      "mode": "0600",
+      "when": {
+        "AW_BACKEND": "local",
+        "AW_EXPOSE": "port"
+      }
+    },
+    {
+      "src": "templates/expose-{{AW_EXPOSE}}.md.in",
+      "dest": "{{TENANT_DIR}}/agent-web/expose/HUONG_DAN.md",
+      "mode": "0600",
+      "when": {
+        "AW_BACKEND": "local",
+        "AW_EXPOSE": [
+          "tunnel",
+          "port"
+        ]
+      }
+    }
+  ],
+  "post_apply": [
+    [
+      "bash",
+      "{{TENANT_DIR}}/agent-web/orchestrator/post_apply.sh",
+      "{{AW_AUTOSTART}}",
+      "{{AW_BACKEND}}",
+      "{{AW_STATS}}"
+    ]
+  ],
+  "commands": {
+    "receiver": {
+      "argv": [
+        "python3",
+        "{{TENANT_DIR}}/agent-web/orchestrator/receiver.py"
+      ]
+    },
+    "stats": {
+      "argv": [
+        "python3",
+        "{{TENANT_DIR}}/agent-web/orchestrator/token_stats.py"
+      ]
+    },
+    "keygen": {
+      "argv": [
+        "python3",
+        "{{TENANT_DIR}}/agent-web/orchestrator/keygen.py"
+      ]
+    },
+    "add-caller": {
+      "argv": [
+        "python3",
+        "{{TENANT_DIR}}/agent-web/orchestrator/add_caller.py"
+      ]
+    },
+    "test-webhook": {
+      "argv": [
+        "python3",
+        "{{TENANT_DIR}}/agent-web/orchestrator/test_webhook.py"
+      ]
+    },
+    "provision": {
+      "argv": [
+        "python3",
+        "{{TENANT_DIR}}/agent-web/orchestrator/provision.py"
+      ]
+    },
+    "tables": {
+      "argv": [
+        "python3",
+        "{{TENANT_DIR}}/agent-web/orchestrator/n8n_tables.py"
+      ]
+    },
+    "deploy-workflow": {
+      "argv": [
+        "python3",
+        "{{TENANT_DIR}}/agent-web/orchestrator/deploy_workflow.py"
+      ]
+    }
+  },
+  "checks": [
+    {
+      "name": "n8n API trả lời",
+      "argv": [
+        "python3",
+        "-c",
+        "import sys,os;sys.path.insert(0,'{{TENANT_DIR}}/agent-web/orchestrator');os.environ['KIT_TENANT']='{{TENANT}}';os.environ['KIT_HOME']='{{KIT_HOME_DIR}}';import awconf as A;A.n8n('GET','/workflows?limit=1')"
+      ],
+      "hint": "kiểm AW_N8N_URL / AW_N8N_API_KEY",
+      "when": {
+        "AW_BACKEND": "n8n"
+      }
+    },
+    {
+      "name": "receiver chỉ nghe loopback",
+      "argv": [
+        "python3",
+        "{{TENANT_DIR}}/agent-web/orchestrator/check_listen.py",
+        "{{AW_LISTEN_PORT}}"
+      ],
+      "hint": "bật: systemctl --user enable --now openclaw-kit-agentweb-receiver.service",
+      "when": {
+        "AW_BACKEND": "local"
+      }
+    },
+    {
+      "name": "receiver trả healthz (trong máy)",
+      "argv": [
+        "python3",
+        "-c",
+        "import urllib.request as u;r=u.urlopen('http://127.0.0.1:{{AW_LISTEN_PORT}}/healthz',timeout=5);assert r.status==200"
+      ],
+      "hint": "xem log: journalctl --user -u openclaw-kit-agentweb-receiver",
+      "when": {
+        "AW_BACKEND": "local"
+      }
+    },
+    {
+      "name": "địa chỉ công khai trả healthz (từ máy này)",
+      "argv": [
+        "python3",
+        "{{TENANT_DIR}}/agent-web/orchestrator/check_public.py",
+        "{{AW_PUBLIC_URL}}"
+      ],
+      "hint": "xem chẩn đoán in ra; hướng dẫn: {{TENANT_DIR}}/agent-web/expose/HUONG_DAN.md",
+      "when": {
+        "AW_BACKEND": "local",
+        "AW_EXPOSE": [
+          "tunnel",
+          "port"
+        ]
+      }
+    },
+    {
+      "name": "khoá công khai Gateway đã tạo",
+      "argv": [
+        "test",
+        "-s",
+        "{{TENANT_DIR}}/agent-web/gateway_pub.pem"
+      ],
+      "hint": "chạy: kit run agent-web keygen"
+    },
+    {
+      "name": "đã có bên gọi webhook",
+      "argv": [
+        "test",
+        "-s",
+        "{{TENANT_DIR}}/agent-web/users.json"
+      ],
+      "hint": "chạy: kit run agent-web add-caller <tên>"
+    }
+  ]
+}

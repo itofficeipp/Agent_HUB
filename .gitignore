@@ -1,0 +1,18 @@
+# Không bao giờ commit bí mật hoặc trạng thái máy
+*.env
+!*.env.example
+secrets/
+secrets.env
+*.pem
+!*.pub.pem
+*.token
+users.json
+params.local.json
+__pycache__/
+*.pyc
+*.bak*
+*.db
+*.db-wal
+*.db-shm
+Caddyfile
+cloudflared-config.yml

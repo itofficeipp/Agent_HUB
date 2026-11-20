@@ -1,0 +1,15 @@
+# Sinh bởi openclaw-kit (agent-web, tenant {{TENANT}}). Caddy tự xin chứng chỉ HTTPS (Let's Encrypt) khi cổng 80/443 tới được máy này.
+# Chỉ proxy đúng 2 đường dẫn; mọi thứ khác trả 404. Làm theo HUONG_DAN.md cùng thư mục.
+{{AW_PUBLIC_HOST}} {
+	encode zstd gzip
+	@aw path /healthz /webhook/{{AW_WEBHOOK_PATH}}
+	handle @aw {
+		request_body {
+			max_size 64KB
+		}
+		reverse_proxy 127.0.0.1:{{AW_LISTEN_PORT}}
+	}
+	handle {
+		respond 404
+	}
+}

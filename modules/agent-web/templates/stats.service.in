@@ -1,0 +1,15 @@
+# Sinh bởi openclaw-kit (agent-web, tenant {{TENANT}}). Thống kê token theo người, chỉ có khi AW_STATS=yes.
+[Unit]
+Description=openclaw-kit agent-web thống kê token (tenant {{TENANT}})
+After=network-online.target
+
+[Service]
+Type=oneshot
+Environment=PATH=%h/.npm-global/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=KIT_HOME={{KIT_HOME_DIR}}
+Environment=KIT_TENANT={{TENANT}}
+WorkingDirectory={{TENANT_DIR}}/agent-web/orchestrator
+ExecStart=/usr/bin/python3 {{TENANT_DIR}}/agent-web/orchestrator/token_stats.py
+TimeoutStartSec=1800
+Nice=10
+UMask=0077

@@ -1,0 +1,12 @@
+# Sinh bởi openclaw-kit (module n8n, tenant {{TENANT}}). Xem docs/EXPOSE.md của kit.
+# Chỉ proxy /healthz và /webhook/*: giao diện quản trị n8n KHÔNG lộ ra Internet (vào bằng http://127.0.0.1:{{N8N_PORT}} hoặc SSH tunnel).
+{{N8N_PUBLIC_HOST}} {
+	encode zstd gzip
+	@wh path /healthz /webhook/*
+	handle @wh {
+		reverse_proxy 127.0.0.1:{{N8N_PORT}}
+	}
+	handle {
+		respond 404
+	}
+}

@@ -1,0 +1,14 @@
+# n8n cho {{TENANT}} (do openclaw-kit sinh mẫu)
+
+Địa chỉ: {{N8N_PUBLIC_URL}}   (máy chỉ nghe 127.0.0.1:{{N8N_PORT}})
+
+1. Cài Docker Engine + compose plugin (nếu chưa): https://docs.docker.com/engine/install/ubuntu/
+2. `cd {{N8N_DIR}} && docker compose up -d`
+3. Mở {{N8N_PUBLIC_URL}} (hoặc http://127.0.0.1:{{N8N_PORT}} trên máy này), tạo tài khoản chủ.
+4. Settings → n8n API → Create API key. Giữ khoá này.
+5. Nối với agent-web:
+   `kit enable agent-web --set AW_BACKEND=n8n --set AW_N8N_URL={{N8N_PUBLIC_URL}}`   (hỏi tiếp API key, ghi vào secrets.env)
+   rồi tạo bảng `kit run agent-web tables` (CHƯA THỬ THẬT; không được thì tạo tay), `kit apply`, `kit run agent-web deploy-workflow`.
+6. Sao lưu: thư mục dữ liệu là Docker volume `n8n_data`; sao lưu cả file .env (khoá mã hoá).
+7. Ra Internet: chọn N8N_EXPOSE=tunnel hoặc port, làm theo expose/ cùng thư mục (cùng các bước như module agent-web: cloudflared hoặc Caddy).
+   Chỉ cần ra Internet nếu hệ thống web bên ngoài gọi webhook thẳng vào n8n.

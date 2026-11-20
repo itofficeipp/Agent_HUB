@@ -1,0 +1,10 @@
+[Unit]
+Description=openclaw-kit agent-web báo cáo token hằng ngày lúc {{AW_STATS_TIME}} (tenant {{TENANT}})
+
+[Timer]
+OnCalendar=*-*-* {{AW_STATS_TIME}}:00
+Persistent=true
+RandomizedDelaySec=60
+
+[Install]
+WantedBy=timers.target

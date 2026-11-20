@@ -1,0 +1,83 @@
+{
+  "name": "n8n",
+  "version": "0.1.0",
+  "title": "n8n (tuỳ chọn): sinh docker-compose.yml mẫu để chạy n8n riêng cho công ty",
+  "description": "Chỉ SINH file mẫu (docker-compose.yml, .env, hướng dẫn); kit không chạy docker. Dùng khi công ty chưa có n8n và chọn AW_BACKEND=n8n cho module agent-web. Công ty không cần n8n thì bỏ qua module này (agent-web dùng receiver tích hợp).",
+  "requires": [
+    "base"
+  ],
+  "min_openclaw": "2026.10.9",
+  "params": [
+    {
+      "key": "N8N_PUBLIC_URL",
+      "prompt": "Địa chỉ n8n (https://n8n.congty.vn; LAN: http://192.168.1.50:5678)",
+      "pattern": "https?://[A-Za-z0-9.-]+(:[0-9]{2,5})?",
+      "probe": "healthz"
+    },
+    {
+      "key": "N8N_PORT",
+      "prompt": "Cổng n8n trên máy (chỉ nghe 127.0.0.1)",
+      "default": "5678",
+      "pattern": "[1-9][0-9]{2,4}"
+    },
+    {
+      "key": "N8N_DIR",
+      "prompt": "Thư mục chứa docker-compose.yml",
+      "default": "~/n8n",
+      "pattern": "[~A-Za-z0-9_./-]+"
+    },
+    {
+      "key": "N8N_ENCRYPTION_KEY",
+      "prompt": "Khoá mã hoá dữ liệu n8n (để trống = tự sinh; MẤT khoá này là mất credential trong n8n)",
+      "secret": true,
+      "default": "random:token32"
+    },
+    {
+      "key": "N8N_EXPOSE",
+      "prompt": "Đưa n8n ra Internet: tunnel (Cloudflare Tunnel) | port (mở 80/443 + Caddy) | none (chỉ LAN)",
+      "default": "none",
+      "pattern": "tunnel|port|none"
+    }
+  ],
+  "files": [
+    {
+      "src": "templates/docker-compose.yml.in",
+      "dest": "{{N8N_DIR}}/docker-compose.yml",
+      "if_exists": "sidecar"
+    },
+    {
+      "src": "templates/env.in",
+      "dest": "{{N8N_DIR}}/.env",
+      "mode": "0600",
+      "if_exists": "skip"
+    },
+    {
+      "src": "templates/HUONG_DAN.md.in",
+      "dest": "{{N8N_DIR}}/HUONG_DAN.md"
+    },
+    {
+      "src": "templates/cloudflared-config.yml.in",
+      "dest": "{{N8N_DIR}}/expose/cloudflared-config.yml",
+      "when": {
+        "N8N_EXPOSE": "tunnel"
+      }
+    },
+    {
+      "src": "templates/Caddyfile.in",
+      "dest": "{{N8N_DIR}}/expose/Caddyfile",
+      "when": {
+        "N8N_EXPOSE": "port"
+      }
+    }
+  ],
+  "checks": [
+    {
+      "name": "docker có trên máy (để chạy n8n)",
+      "argv": [
+        "docker",
+        "--version"
+      ],
+      "hint": "cài Docker Engine + compose plugin: https://docs.docker.com/engine/install/ubuntu/"
+    }
+  ]
+}

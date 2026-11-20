@@ -1,0 +1,9 @@
+# Sinh bởi openclaw-kit (module n8n, tenant {{TENANT}}). Làm theo các bước cloudflared trong docs/EXPOSE.md của kit; thay <TUNNEL_ID>.
+# n8n có giao diện quản trị: nên bật Cloudflare Access cho hostname này, và/hoặc chỉ cho đường /webhook/ đi qua nếu không cần mở UI ra ngoài.
+tunnel: <TUNNEL_ID>
+credentials-file: {{HOME}}/.cloudflared/<TUNNEL_ID>.json
+ingress:
+  - hostname: {{N8N_PUBLIC_HOST}}
+    path: ^/(healthz|webhook/.*)$
+    service: http://127.0.0.1:{{N8N_PORT}}
+  - service: http_status:404

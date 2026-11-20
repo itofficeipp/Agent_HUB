@@ -1,0 +1,15 @@
+# Sinh bởi openclaw-kit (module agent-web). Tắt: systemctl --user disable --now openclaw-kit-agentweb-provision.timer
+[Unit]
+Description=openclaw-kit agent-web provision tick (tenant {{TENANT}})
+After=network-online.target
+
+[Service]
+Type=oneshot
+Environment=PATH=%h/.npm-global/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=KIT_HOME={{KIT_HOME_DIR}}
+Environment=KIT_TENANT={{TENANT}}
+WorkingDirectory={{TENANT_DIR}}/agent-web/orchestrator
+ExecStart=/usr/bin/python3 {{TENANT_DIR}}/agent-web/orchestrator/provision_tick.py
+TimeoutStartSec=1800
+Nice=10
+UMask=0077

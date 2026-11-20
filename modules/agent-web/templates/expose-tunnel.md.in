@@ -1,0 +1,18 @@
+# Đưa receiver ra Internet bằng Cloudflare Tunnel (AW_EXPOSE=tunnel)
+
+Địa chỉ web bên ngoài sẽ gọi: **{{AW_PUBLIC_URL}}/webhook/<đường dẫn bí mật>** (đường dẫn nằm trong params.json: AW_WEBHOOK_PATH).
+Không mở port nào trên router. Máy tự kết nối ra Cloudflare.
+
+Việc BẠN làm (kit không đăng nhập Cloudflare thay bạn):
+1. Tên miền {{AW_PUBLIC_HOST}} phải thuộc một zone đã thêm vào tài khoản Cloudflare.
+2. Cài cloudflared: https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/
+3. `cloudflared tunnel login`            (mở trình duyệt, chọn zone)
+4. `cloudflared tunnel create agent-web-{{TENANT}}`   (in ra TUNNEL_ID; tạo file ~/.cloudflared/<TUNNEL_ID>.json)
+5. `cloudflared tunnel route dns agent-web-{{TENANT}} {{AW_PUBLIC_HOST}}`
+6. Sửa file cloudflared-config.yml cùng thư mục này: thay <TUNNEL_ID> (2 chỗ), rồi copy:
+   `mkdir -p ~/.cloudflared && cp cloudflared-config.yml ~/.cloudflared/config.yml`
+7. Chạy thử: `cloudflared tunnel run agent-web-{{TENANT}}`; chạy nền: `sudo cloudflared service install`
+8. Kiểm: `kit doctor` (mục "địa chỉ công khai").
+
+Khuyến nghị (tuỳ chọn): bật Cloudflare Access (Zero Trust) cho {{AW_PUBLIC_HOST}} với service token hoặc giới hạn IP của hệ thống web.
+Receiver đã có: Basic auth + HMAC + chống gửi lại + giới hạn tần suất; Access là lớp chặn thêm trước khi tới máy.

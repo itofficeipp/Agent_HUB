@@ -1,0 +1,9 @@
+# Sinh bởi openclaw-kit (agent-web, tenant {{TENANT}}). Chỉ cho đúng 2 đường dẫn đi qua tunnel; mọi thứ khác trả 404.
+# Làm theo HUONG_DAN.md cùng thư mục, rồi thay <TUNNEL_ID>.
+tunnel: <TUNNEL_ID>
+credentials-file: {{HOME}}/.cloudflared/<TUNNEL_ID>.json
+ingress:
+  - hostname: {{AW_PUBLIC_HOST}}
+    path: ^/(healthz|webhook/{{AW_WEBHOOK_PATH}})$
+    service: http://127.0.0.1:{{AW_LISTEN_PORT}}
+  - service: http_status:404

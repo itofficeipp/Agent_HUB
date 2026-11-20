@@ -1,0 +1,17 @@
+# Đưa receiver ra Internet bằng mở port (AW_EXPOSE=port)
+
+Địa chỉ web bên ngoài sẽ gọi: **{{AW_PUBLIC_URL}}/webhook/<đường dẫn bí mật>** (đường dẫn nằm trong params.json: AW_WEBHOOK_PATH).
+Receiver chỉ nghe 127.0.0.1:{{AW_LISTEN_PORT}}. Caddy (HTTPS) là cổng duy nhất lộ ra ngoài.
+
+ĐIỀU KIỆN: nhà mạng phải cấp IP công cộng. Nếu router hiện IP WAN khác IP bạn thấy ở https://ifconfig.me (CGNAT) thì mở port KHÔNG chạy; dùng AW_EXPOSE=tunnel.
+
+Việc BẠN làm:
+1. DNS: trỏ bản ghi A của {{AW_PUBLIC_HOST}} về IP công cộng (hoặc dùng DDNS nếu IP đổi).
+2. Router: chuyển cổng TCP 80 và 443 tới IP LAN của máy này.
+3. Firewall máy: `sudo ufw allow 80,443/tcp` (nếu dùng ufw).
+4. Cài Caddy: https://caddyserver.com/docs/install
+5. Copy Caddyfile cùng thư mục này: `sudo cp Caddyfile /etc/caddy/Caddyfile && sudo systemctl reload caddy`
+   (cổng 80 cần mở để Caddy xin chứng chỉ Let's Encrypt lần đầu)
+6. Kiểm: `kit doctor`, và thử thêm từ điện thoại dùng 4G (từ trong LAN có thể không đại diện cho bên ngoài).
+
+Nên có: chỉ cho IP của hệ thống web gọi vào (firewall hoặc router), nếu IP đó cố định.

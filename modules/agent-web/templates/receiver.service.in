@@ -1,0 +1,19 @@
+# Sinh bởi openclaw-kit (module agent-web, tenant {{TENANT}}). Tắt: systemctl --user disable --now openclaw-kit-agentweb-receiver.service
+[Unit]
+Description=openclaw-kit agent-web receiver (tenant {{TENANT}})
+After=network.target
+
+[Service]
+Type=simple
+Environment=PATH=%h/.npm-global/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=KIT_HOME={{KIT_HOME_DIR}}
+Environment=KIT_TENANT={{TENANT}}
+WorkingDirectory={{TENANT_DIR}}/agent-web/orchestrator
+ExecStart=/usr/bin/python3 {{TENANT_DIR}}/agent-web/orchestrator/receiver.py
+Restart=on-failure
+RestartSec=3
+UMask=0077
+NoNewPrivileges=true
+
+[Install]
+WantedBy=default.target

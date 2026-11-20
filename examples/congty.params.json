@@ -1,0 +1,17 @@
+{
+  "COMPANY_NAME": "Cong ty Mau",
+  "OWNER_NAME": "Chu Mau",
+  "ASSISTANT_NAME": "Tro ly",
+  "TIMEZONE": "Asia/Ho_Chi_Minh",
+  "PRIMARY_MODEL": "anthropic/claude-sonnet-5-5",
+  "AW_PUBLIC_URL": "https://agents.example.com",
+  "AW_EXPOSE": "tunnel",
+  "AW_GATEWAY_ID": "gateway1",
+  "AW_GATEWAY_SSH": "user@GATEWAY_IP",
+  "AW_GATEWAY_SSH_KEY": "~/.ssh/khoa_gateway",
+  "AW_AGENT_ROOT": "/srv/agents",
+  "AW_MCP_PROFILE": "example",
+  "AW_ALERT_CHANNEL": "telegram",
+  "AW_AUTOSTART": "no",
+  "_ghi_chu": "Mau tham so khong bi mat. Cong ty co n8n san: them AW_BACKEND=n8n va AW_N8N_URL. Cong ty chua co n8n: dung mac dinh local + AW_EXPOSE. Bi mat (vd AW_N8N_API_KEY) KHONG de o day."
+}
