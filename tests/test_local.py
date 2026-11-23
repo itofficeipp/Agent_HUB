@@ -273,6 +273,12 @@ r = sh(KIT + ["setup", "cty-13", "--yes", "--modules", "khong-co"]); ok(r.return
 r = sh(KIT + ["setup", "--yes"]); ok(r.returncode != 0 and "tên tenant" in r.stderr, "kit setup --yes khi co nhieu tenant ma khong chi ten: tu choi", r.stderr)
 r = sh(KIT + ["preflight"]); ok(r.returncode == 0 and "openclaw" in r.stdout and "sẵn sàng" in r.stdout, "kit preflight: OK voi openclaw gia", r.stdout[-400:])
 env2 = dict(ENV, OPENCLAW_BIN="/khong/co/openclaw"); r = sh(KIT + ["preflight"], env=env2); ok(r.returncode == 1 and "LOI" in r.stdout and "openclaw onboard" in r.stdout, "kit preflight: thieu openclaw -> LOI + goi y cai", r.stdout[-400:])
+# umask 002 (Ubuntu mac dinh): kit khong duoc tao ~/.config nhom-ghi-duoc (OpenClaw tu choi cai service)
+nh = T + "/newhome"; os.makedirs(nh)
+r = subprocess.run(KIT + ["init", "cty-um"], capture_output=True, text=True, preexec_fn=lambda: os.umask(0o002), env=dict(ENV, KIT_HOME=nh + "/.config/openclaw-kit", KIT_USER_HOME=nh))
+md = lambda p: oct(os.stat(p).st_mode & 0o777)
+ok(r.returncode == 0 and not (os.stat(nh + "/.config").st_mode & 0o022) and md(nh + "/.config/openclaw-kit/tenants/cty-um") == "0o700", "umask 002: kit init khong tao ~/.config nhom-ghi-duoc; tenant 0700", md(nh + "/.config"))
+os.chmod(nh + "/.config", 0o775); r = sh(KIT + ["preflight"], env=dict(ENV, KIT_HOME=nh + "/.config/openclaw-kit", KIT_USER_HOME=nh)); ok(r.returncode == 1 and "chmod go-w" in r.stdout, "preflight: ~/.config nhom-ghi-duoc -> LOI + goi y chmod go-w", r.stdout[-300:])
 # moi module.json: moi tham so co hint
 for mn in ("base", "agent-web", "n8n"):
     miss = [s["key"] for s in json.load(open(ROOT + "/modules/" + mn + "/module.json"))["params"] if not s.get("hint")]

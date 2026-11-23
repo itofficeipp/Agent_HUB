@@ -248,6 +248,9 @@ def preflight(mods=()):
         chk("warn", dk, "docker (agent chạy trong sandbox; n8n cũng cần)", "cài Docker Engine theo docs.docker.com/engine/install/ubuntu rồi: sudo usermod -aG docker $USER (đăng nhập lại)")
         if dk: chk("warn", run(["docker", "info"]).returncode == 0, "user hiện tại dùng được docker (không cần sudo)", "sudo usermod -aG docker $USER rồi đăng nhập lại")
     free = shutil.disk_usage(str(USER_HOME)).free / 2**30
+    cfgp = CFG.parent
+    for d in (cfgp, cfgp / "systemd" / "user"):
+        if d.exists(): chk("err", not (d.stat().st_mode & 0o022), f"quyền thư mục {d} (không nhóm/người khác ghi được)", f"chmod go-w {d}   (OpenClaw từ chối cài service nếu thư mục này group/world-writable)")
     chk("warn", free >= 5, f"dung lượng trống {free:.1f} GB (khuyên >= 5 GB; image sandbox khá nặng)", "giải phóng ổ đĩa hoặc mở rộng đĩa")
     print("  => " + ("sẵn sàng" if not bad else f"{bad} mục LỖI cần sửa trước khi cài"))
     return bad
@@ -352,7 +355,7 @@ def cmd_init(a):
     tdir(t).mkdir(parents=True, exist_ok=True); os.chmod(tdir(t), 0o700)
     save_params(t, load_params(t)); save_state(t, load_state(t))
     (CFG / "current").write_text(t + "\n")
-    print(f"Đã tạo tenant '{t}' tại {tdir(t)}\nBước tiếp: kit enable base   (rồi: kit enable agent-web)")
+    print(f"Đã tạo tenant '{t}' tại {tdir(t)}\nBước tiếp: kit setup {t}   (hỏi từng bước có gợi ý), hoặc thủ công: kit enable base, kit enable agent-web")
 
 def cmd_modules(a):
     t = a.tenant or ((CFG / "current").read_text().strip() if (CFG / "current").exists() else None)
@@ -443,6 +446,7 @@ def cmd_export(a):
     sys.exit(subprocess.run([sys.executable, str(ROOT / "tools" / "export_config.py")] + a.args).returncode)
 
 def main():
+    os.umask(0o022)   # tránh tạo ~/.config nhóm-ghi được (umask 002 mặc định Ubuntu): OpenClaw từ chối cài service nếu thư mục cha group/world-writable
     p = argparse.ArgumentParser(prog="kit", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--tenant"); sp = p.add_subparsers(dest="cmd", required=True)
     s = sp.add_parser("setup"); s.add_argument("name", nargs="?"); s.add_argument("--modules", help="vd base,agent-web (mặc định: hỏi)"); s.add_argument("--set", action="append"); s.add_argument("--params-file"); s.add_argument("--yes", action="store_true", help="không hỏi: dùng --set/--params-file/mặc định"); s.add_argument("--no-apply", action="store_true", help="chỉ lưu + xem trước, không dựng"); s.set_defaults(f=cmd_setup)
