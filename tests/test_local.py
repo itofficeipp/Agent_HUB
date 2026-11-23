@@ -175,6 +175,40 @@ ok("N8N_ENCRYPTION_KEY" not in open(T + "/cfg/tenants/t7/params.json").read(), "
 ok(os.path.exists(H + "/n8n/expose/cloudflared-config.yml") and "n8n.example.invalid" in open(H + "/n8n/expose/cloudflared-config.yml").read(), "n8n: expose=tunnel sinh cloudflared-config.yml")
 ok("webhook/.*" in open(H + "/n8n/expose/cloudflared-config.yml").read(), "n8n: tunnel chi cho /healthz va /webhook/*")
 
+# ---- 10. mo_cong_cu (AW_TOOLS_*): mở web/browser/runtime cho agent sandbox, bỏ qua agent quyền rộng, idempotent ----
+sh(KIT + ["init", "t8"]); sh(KIT + ["--tenant", "t8", "enable", "base", "--yes", "--set", "COMPANY_NAME=M", "--set", "OWNER_NAME=M", "--set", "WORKSPACE_DIR=" + H + "/wsm"])
+r = sh(KIT + ["--tenant", "t8", "enable", "agent-web", "--yes", "--set", "AW_EXPOSE=none", "--set", "AW_AGENT_ROOT=" + H + "/am"]); ok(r.returncode == 0, "enable agent-web (AW_TOOLS_WEB mac dinh no)", r.stderr)
+P8 = json.load(open(T + "/cfg/tenants/t8/params.json")); ok(P8["AW_TOOLS_WEB"] == "no" and "AW_TOOLS_BROWSER" not in P8, "mac dinh: AW_TOOLS_WEB=no, khong hoi tuy chon con", P8)
+ok(sh(KIT + ["--tenant", "t8", "apply", "agent-web"]).returncode == 0, "apply agent-web t8 (tools tat)")
+ocj = H + "/.config/agentweb/mo_cong_cu.json"; ok(os.path.exists(ocj) and json.load(open(ocj)) == {"web": False}, "tools tat: mo_cong_cu.json = {web:false}", open(ocj).read() if os.path.exists(ocj) else "")
+STRICT = ["group:runtime", "group:sessions", "group:ui", "group:nodes", "group:automation", "group:agents", "group:messaging"]
+cf = json.load(open(ENV["FAKE_OC_CFG"])); ent = cf.setdefault("agents", {}).setdefault("entries", {})
+for aid, sbm in (("u_tt_norm", "all"), ("u_tt_full", "all"), ("u_tt_host", "off")):
+    ent[aid] = {"workspace": H + "/x", "tools": {"deny": list(STRICT), "fs": {"workspaceOnly": True}}, "sandbox": {"mode": sbm}}
+json.dump(cf, open(ENV["FAKE_OC_CFG"], "w")); snap = json.dumps(cf, sort_keys=True)
+r = sh(KIT + ["--tenant", "t8", "run", "agent-web", "open-tools"]); ok(r.returncode != 0 and "AW_TOOLS_WEB=no" in (r.stderr + r.stdout), "tools tat: open-tools tu choi", r.stdout + r.stderr)
+r = sh(["python3", H + "/openclaw-kit-agentweb/mo_cong_cu.py"]); ok(r.returncode == 0 and "XONG" in r.stdout and json.dumps(json.load(open(ENV["FAKE_OC_CFG"])), sort_keys=True) == snap, "tools tat: mo_cong_cu.py khong doi cau hinh", r.stdout)
+r = sh(KIT + ["--tenant", "t8", "enable", "agent-web", "--yes", "--set", "AW_TOOLS_WEB=yes", "--set", "AW_TOOLS_BROWSER=yes", "--set", "AW_TOOLS_RUNTIME=yes", "--set", "AW_SANDBOX_IMAGE=img:test", "--set", "AW_SEARCH_PROVIDER=prov-x", "--set", "AW_FULL_AGENTS=u_tt_full"]); ok(r.returncode == 0, "enable AW_TOOLS_*=yes", r.stderr)
+ok(sh(KIT + ["--tenant", "t8", "apply", "agent-web"]).returncode == 0, "apply agent-web t8 (tools bat)")
+o8 = json.load(open(ocj)); ok(o8["web"] and o8["browser"] and o8["runtime"] and o8["full_agents"] == ["u_tt_full"] and o8["sandbox_image"] == "img:test" and oct(os.stat(ocj).st_mode & 0o777) == "0o600", "mo_cong_cu.json dung + chmod 600", o8)
+r = sh(KIT + ["--tenant", "t8", "run", "agent-web", "open-tools", "--dry-run"]); ok(r.returncode == 0 and "SE " in r.stdout and json.dumps(json.load(open(ENV["FAKE_OC_CFG"])), sort_keys=True) == snap, "open-tools --dry-run: liet ke, khong ghi", r.stdout)
+r = sh(KIT + ["--tenant", "t8", "run", "agent-web", "open-tools"]); ok(r.returncode == 0 and r.stdout.strip().endswith("XONG"), "open-tools: chay OK", r.stdout + r.stderr)
+cf = json.load(open(ENV["FAKE_OC_CFG"])); en = cf["agents"]["entries"]
+n = en["u_tt_norm"]["tools"]; f = en["u_tt_full"]["tools"]; h = en["u_tt_host"]["tools"]
+ok("group:runtime" not in n["deny"] and "group:ui" not in n["deny"] and "terminal" in n["deny"] and "group:sessions" in n["deny"], "agent thuong: bo runtime + ui, thay ui bang danh sach hep, giu sessions", n["deny"])
+ok(n["sandbox"]["tools"]["alsoAllow"] == ["web_search", "web_fetch", "browser"], "agent thuong: alsoAllow web_search/web_fetch/browser", n["sandbox"])
+ok("gateway" in n["sandbox"]["tools"]["deny"] and "telegram" in n["sandbox"]["tools"]["deny"], "agent thuong: sandbox.deny chan gateway/kenh nhan tin")
+ok("deny" not in f.get("sandbox", {}).get("tools", {}) and f["sandbox"]["tools"]["alsoAllow"][:2] == ["web_search", "web_fetch"], "agent quyen rong: co web nhung KHONG bi ghi de sandbox.deny", f)
+ok(h == {"deny": STRICT, "fs": {"workspaceOnly": True}}, "agent khong sandbox: khong bi dong vao", h)
+ok(cf["tools"]["web"]["search"]["provider"] == "prov-x" and cf["agents"]["defaults"]["sandbox"]["docker"]["image"] == "img:test" and cf["agents"]["defaults"]["sandbox"]["browser"]["enabled"] is True, "toan cuc: search provider, image sandbox, browser.enabled")
+snap2 = json.dumps(cf, sort_keys=True); r = sh(KIT + ["--tenant", "t8", "run", "agent-web", "open-tools"])
+ok(r.returncode == 0 and "OK " not in r.stdout and json.dumps(json.load(open(ENV["FAKE_OC_CFG"])), sort_keys=True) == snap2, "open-tools lan 2 idempotent (khong thay doi)", r.stdout)
+
+cf = json.load(open(ENV["FAKE_OC_CFG"])); cf["agents"]["entries"]["u_tt_new"] = {"workspace": H + "/x", "tools": {"deny": list(STRICT), "fs": {"workspaceOnly": True}}, "sandbox": {"mode": "all"}}; json.dump(cf, open(ENV["FAKE_OC_CFG"], "w"))
+r = sh([sys.executable, T + "/cfg/tenants/t8/agent-web/orchestrator/provision.py"], env=dict(ENV, KIT_TENANT="t8"))
+cf = json.load(open(ENV["FAKE_OC_CFG"])); nw = cf["agents"]["entries"]["u_tt_new"]["tools"]
+ok(r.returncode == 0 and "OK mo cong cu" in r.stdout and nw["sandbox"]["tools"]["alsoAllow"] == ["web_search", "web_fetch", "browser"] and "group:runtime" not in nw["deny"], "provision.py: agent moi tao duoc mo cong cu tu dong (AW_TOOLS_WEB=yes)", r.stdout + r.stderr)
+
 print("\n=== KET QUA test_local:", "TAT CA PASS" if not bad else str(bad) + " LOI", "(thu muc tam:", T + ")")
 if not bad: shutil.rmtree(T, ignore_errors=True)
 sys.exit(1 if bad else 0)

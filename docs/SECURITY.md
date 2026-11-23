@@ -10,3 +10,5 @@
 - Agent người dùng: sandbox `all`, deny nhóm tool runtime/sessions/ui/nodes/automation/agents/messaging, `fs.workspaceOnly`.
 - Kho SQLite của receiver (`agent-web/data/agent-web.db`) chỉ chứa `bi_mat` đã mã hoá bằng khoá công khai; không chứa token rõ, mật khẩu hay khoá HMAC. Log receiver không ghi body/header xác thực.
 - File `expose/*` chứa đường dẫn webhook bí mật nên đặt chmod 600 và không commit.
+
+- Mở thêm công cụ cho agent (`AW_TOOLS_WEB=yes`, mặc định TẮT): chỉ áp cho agent có sandbox `all`; `AW_TOOLS_RUNTIME=yes` chỉ cho exec/file TRONG sandbox của agent; `AW_TOOLS_BROWSER=yes` bật trình duyệt sandbox và vẫn chặn gateway/nodes/kênh nhắn tin trong sandbox. Agent trong `AW_FULL_AGENTS` không bị ghi đè `sandbox.deny`: chỉ liệt kê agent anh/chị đã quyết định cấp quyền rộng.

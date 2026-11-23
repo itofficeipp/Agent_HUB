@@ -77,8 +77,17 @@ def gan_mcp(only):
         ok = s.returncode == 0 and last.startswith("OK"); print(("OK " if ok else "LOI ") + f"mcp dong bo -> {last[:200]}"); loi += (not ok)
     return loi
 
+def mo_cong_cu():
+    """AW_TOOLS_WEB=yes: mở thêm công cụ cho MỌI agent sandbox (idempotent), gồm agent vừa tạo."""
+    if A.C.get("AW_TOOLS_WEB") != "yes": return 0
+    c = A.gw(f"python3 {GDIR}/mo_cong_cu.py", timeout=300); last = last_line(c, ("XONG", "LOI"))
+    ok = c.returncode == 0 and last.startswith("XONG")
+    ch = [l for l in c.stdout.splitlines() if l.startswith("OK ")]
+    if ch or not ok: print(("OK " if ok else "LOI ") + f"mo cong cu: {len(ch)} thay doi; {last[:200]}")
+    return 0 if ok else 1
+
 def main():
     ap = argparse.ArgumentParser(); ap.add_argument("--chi"); o = ap.parse_args()
-    loi = tao_agent(o.chi) + gan_kenh(o.chi) + gan_mcp(o.chi)
+    loi = tao_agent(o.chi) + gan_kenh(o.chi) + gan_mcp(o.chi) + mo_cong_cu()
     sys.exit(1 if loi else 0)
 main()

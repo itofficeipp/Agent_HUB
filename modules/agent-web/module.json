@@ -1,6 +1,6 @@
 {
   "name": "agent-web",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "title": "Tạo nhân viên từ hệ thống web: agent riêng + bot Telegram riêng + MCP riêng (receiver tích hợp hoặc n8n -> Gateway)",
   "description": "Hệ thống ngoài (web/HRM) gọi webhook (Basic auth + HMAC + chống gửi lại) để tạo 'nhân viên'. Mặc định receiver tích hợp (Python, SQLite) không cần n8n; tuỳ chọn dùng workflow n8n. Orchestrator tạo agent sandbox riêng trên Gateway, gắn bot Telegram và MCP riêng. Token bot/MCP mã hoá RSA-OAEP, máy nhận không giữ bản rõ. Tuỳ chọn: Cloudflare Tunnel hoặc mở port; thống kê token theo người.",
   "requires": [
@@ -149,6 +149,60 @@
       "pattern": "[a-z0-9_-]+"
     },
     {
+      "key": "AW_TOOLS_WEB",
+      "prompt": "Mở thêm công cụ cho agent: tìm web + đọc trang web (web_search, web_fetch) (yes/no; tắt = giữ cấu hình chặt mặc định)",
+      "default": "no",
+      "pattern": "yes|no"
+    },
+    {
+      "key": "AW_TOOLS_BROWSER",
+      "prompt": "Mở thêm trình duyệt (browser) cho agent (yes/no)",
+      "default": "no",
+      "pattern": "yes|no",
+      "when": {
+        "AW_TOOLS_WEB": "yes"
+      }
+    },
+    {
+      "key": "AW_TOOLS_RUNTIME",
+      "prompt": "Cho agent exec/process/đọc ghi file trong SANDBOX của nó, tức bỏ group:runtime khỏi deny (yes/no)",
+      "default": "no",
+      "pattern": "yes|no",
+      "when": {
+        "AW_TOOLS_WEB": "yes"
+      }
+    },
+    {
+      "key": "AW_SANDBOX_IMAGE",
+      "prompt": "Image docker sandbox (trống = không đổi; vd openclaw-sandbox-office:bookworm)",
+      "required": false,
+      "optional": true,
+      "default": "",
+      "when": {
+        "AW_TOOLS_WEB": "yes"
+      }
+    },
+    {
+      "key": "AW_SEARCH_PROVIDER",
+      "prompt": "Nhà cung cấp web search toàn cục (trống = không đổi; vd parallel-free)",
+      "required": false,
+      "optional": true,
+      "default": "",
+      "when": {
+        "AW_TOOLS_WEB": "yes"
+      }
+    },
+    {
+      "key": "AW_FULL_AGENTS",
+      "prompt": "agent_id được cấp quyền rộng, không ghi đè sandbox.deny (phân tách dấu phẩy; trống = không có)",
+      "required": false,
+      "optional": true,
+      "default": "",
+      "when": {
+        "AW_TOOLS_WEB": "yes"
+      }
+    },
+    {
       "key": "AW_ALERT_CHANNEL",
       "prompt": "Kênh báo lỗi",
       "default": "telegram"
@@ -257,6 +311,12 @@
       }
     },
     {
+      "src": "orchestrator/open_tools.py",
+      "dest": "{{TENANT_DIR}}/agent-web/orchestrator/open_tools.py",
+      "render": false,
+      "mode": "0755"
+    },
+    {
       "src": "orchestrator/test_webhook.py",
       "dest": "{{TENANT_DIR}}/agent-web/orchestrator/test_webhook.py",
       "render": false,
@@ -283,6 +343,12 @@
     {
       "src": "gateway/gan_mcp.py",
       "dest": "{{TENANT_DIR}}/agent-web/gateway/gan_mcp.py",
+      "render": false,
+      "mode": "0755"
+    },
+    {
+      "src": "gateway/mo_cong_cu.py",
+      "dest": "{{TENANT_DIR}}/agent-web/gateway/mo_cong_cu.py",
       "render": false,
       "mode": "0755"
     },
@@ -438,6 +504,12 @@
       "argv": [
         "python3",
         "{{TENANT_DIR}}/agent-web/orchestrator/deploy_workflow.py"
+      ]
+    },
+    "open-tools": {
+      "argv": [
+        "python3",
+        "{{TENANT_DIR}}/agent-web/orchestrator/open_tools.py"
       ]
     }
   },

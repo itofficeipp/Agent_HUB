@@ -4,5 +4,5 @@ useDefault = true
 
 [allowlist]
 description = "mau/placeholder"
-regexes = ['''<REDACTED>''', '''dummy-key-123''', '''tokenmcp-secret-12345''', '''token[AB]{15,}''', '''hmac-secret-test''']
-paths = ['''tests/''']
+regexes = ['''<REDACTED>''', '''dummy-key-123''', '''tokenmcp-secret-12345''', '''token[AB]{15,}''', '''hmac-secret-test''', '''abcdefgh12345678''']
+paths = ['''tests/''', '''tests/test_xac_thuc\.js''']
