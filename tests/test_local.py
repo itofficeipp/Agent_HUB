@@ -299,6 +299,8 @@ def with_cli(on):
     json.dump(c, open(CFGP, "w"))
 with_cli(True)
 r = sh(KIT + ["--tenant", "t2", "doctor"]); ok("LOI  model không dùng runner claude-cli" in r.stdout and "/agents/defaults/models/anthropic/*" in r.stdout and "docs/MODEL-AUTH.md" in r.stdout, "doctor 0.3.4: model gán claude-cli -> LOI (khong sandbox) + noi gap + goi y", r.stdout[-700:])
+r0 = sh(KIT + ["--tenant", "t2", "doctor"]); r1 = sh(KIT + ["--tenant", "t2", "doctor", "--strict"])
+ok(r0.returncode == 0 and r1.returncode == 1 and "mục lỗi" in r1.stdout, "doctor 0.3.5: co LOI -> mac dinh rc=0, --strict rc=1", (r0.returncode, r1.returncode))
 r = sh(KIT + ["--tenant", "t2", "doctor"], env=dict(ENV, KIT_ALLOW_CLAUDE_CLI="1")); ok("claude-cli được cho phép có chủ đích" in r.stdout and "LOI  model không dùng" not in r.stdout, "KIT_ALLOW_CLAUDE_CLI=1: cho phep co chu dich, van noi ro KHONG sandbox", r.stdout[-400:])
 with_cli(False)
 r = sh(KIT + ["--tenant", "t2", "doctor"]); ok("OK   model không dùng runner claude-cli" in r.stdout, "doctor: khong claude-cli -> OK", r.stdout[-400:])
@@ -307,6 +309,7 @@ r = sh(KIT + ["sandbox-image"]); bi = open(T + "/docker.build.in").read() if os.
 ok(r.returncode == 0 and "FROM debian:trixie-slim" in bi and "python3" in bi and "USER sandbox" in bi and "build -t openclaw-sandbox:trixie-slim" in open(DLOG).read(), "kit sandbox-image: docker build dung tag + Dockerfile (debian trixie-slim, python3, user sandbox)", r.stdout + r.stderr + bi[:200])
 n0 = open(DLOG).read().count("build -t"); r = sh(KIT + ["sandbox-image"]); ok("đã có" in r.stdout and open(DLOG).read().count("build -t") == n0, "kit sandbox-image lan 2: khong dung lai (idempotent)", r.stdout)
 r = sh(KIT + ["--tenant", "t2", "doctor"]); ok("OK   image sandbox openclaw-sandbox:trixie-slim" in r.stdout, "doctor: co image -> OK", r.stdout[-400:])
+r = sh(KIT + ["--tenant", "t2", "doctor", "--strict"]); ok(("mục lỗi" not in r.stdout) == (r.returncode == 0), "doctor --strict: rc=0 khi khong co LOI, rc=1 khi co", (r.returncode, r.stdout[-300:]))
 r = sh(KIT + ["sandbox-image", "--force"], env=dict(ENV, KIT_SANDBOX_IMAGE="openclaw-sandbox:bookworm-slim")); ok("FROM debian:bookworm-slim" in open(T + "/docker.build.in").read(), "KIT_SANDBOX_IMAGE doi tag -> base debian tuong ung", r.stdout + r.stderr)
 json.dump(cfg0, open(CFGP, "w"))
 

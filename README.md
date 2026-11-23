@@ -67,7 +67,7 @@ Chi tiết: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Thêm công ty mới: 
 | `kit enable <module> [--set K=V] [--params-file f.json] [--yes]` | hỏi/nhận tham số, lưu |
 | `kit apply [module] [--dry-run]` | dựng file, systemd, `openclaw config patch` (idempotent) |
 | `kit update [--with-openclaw]` | git pull kit → (tuỳ chọn) `openclaw update` → migrations → apply → doctor |
-| `kit doctor` | kiểm môi trường + từng module |
+| `kit doctor [--strict]` | kiểm môi trường + từng module; `--strict` thoát mã 1 nếu có LỖI (mặc định 0) |
 | `kit run agent-web <keygen\|add-caller\|test-webhook\|provision\|receiver\|stats>` (+ `deploy-workflow\|tables` khi dùng n8n) | lệnh riêng của module |
 | `kit run agent-web open-tools [--dry-run]` | mở web/trình duyệt cho agent theo `AW_TOOLS_*` (trên Gateway) |
 | `kit export-config` | xuất cấu hình OpenClaw đã che bí mật (để đưa vào mẫu) |

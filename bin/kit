@@ -8,7 +8,7 @@
   kit enable <module>            hỏi tham số, lưu (bí mật -> secrets.env chmod 600)
   kit apply [module] [--dry-run] dựng cấu hình/dịch vụ từ mẫu (idempotent)
   kit update [--with-openclaw]   git pull kit + (tuỳ chọn) update OpenClaw + migrations + apply + doctor
-  kit doctor                     kiểm tra môi trường và từng module (gồm sandbox/runtime model)
+  kit doctor [--strict]          kiểm tra môi trường và từng module (gồm sandbox/runtime model); --strict: thoát mã 1 nếu có LỖI
   kit sandbox-image [--force]    dựng image Docker sandbox cho agent (OpenClaw không tự dựng)
   kit run <module> <lệnh> ...    lệnh riêng của module (vd agent-web add-caller)
   kit export-config              xuất cấu hình máy hiện tại đã che bí mật (để xem/đưa vào mẫu)
@@ -505,7 +505,9 @@ def cmd_doctor(a):
             except Exception as e: ok, out = False, str(e)
             chk(ok, f"[{n}] {c['name']}", render(c["hint"], context(t), "hint") if c.get("hint") else out)
             if not ok and out and c.get("hint"): print("       " + out.replace("\n", "\n       "))
-    print("Tất cả OK" if not bad else f"{bad} mục lỗi"); return bad
+    print("Tất cả OK" if not bad else f"{bad} mục lỗi")
+    if bad and getattr(a, "strict", False): sys.exit(1)   # --strict: thoát mã 1 khi có LỖI (mặc định vẫn 0 để không phá script cũ)
+    return bad
 
 def cmd_run(a):
     t = current_tenant(a.tenant); man = manifest(a.module)
@@ -529,7 +531,7 @@ def main():
     s = sp.add_parser("enable"); s.add_argument("module"); s.add_argument("--set", action="append"); s.add_argument("--params-file", help="JSON tham số KHÔNG bí mật (xem examples/)"); s.add_argument("--yes", action="store_true"); s.set_defaults(f=cmd_enable)
     s = sp.add_parser("apply"); s.add_argument("module", nargs="?"); s.add_argument("--dry-run", action="store_true"); s.set_defaults(f=cmd_apply)
     s = sp.add_parser("update"); s.add_argument("--with-openclaw", action="store_true"); s.set_defaults(f=cmd_update)
-    s = sp.add_parser("doctor"); s.set_defaults(f=cmd_doctor)
+    s = sp.add_parser("doctor"); s.add_argument("--strict", action="store_true", help="thoát mã 1 nếu có mục LỖI (mặc định thoát 0)"); s.set_defaults(f=cmd_doctor)
     s = sp.add_parser("sandbox-image"); s.add_argument("--force", action="store_true"); s.set_defaults(f=cmd_sandbox_image)
     s = sp.add_parser("run"); s.add_argument("module"); s.add_argument("command"); s.add_argument("args", nargs=argparse.REMAINDER); s.set_defaults(f=cmd_run)
     s = sp.add_parser("export-config"); s.add_argument("args", nargs=argparse.REMAINDER); s.set_defaults(f=cmd_export)

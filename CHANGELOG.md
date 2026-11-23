@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.3.5
+- **kit doctor --strict**: thoát mã 1 khi có mục LỖI (để CI/script/tự động hoá dùng được). Không có `--strict` vẫn thoát mã 0 như cũ (đã rà: setup/update gọi doctor nội bộ, không dựa vào mã thoát; test cũ không đọc mã thoát của doctor). `kit setup` và `kit update` không đổi.
+
 ## 0.3.4
 - **kit doctor** (khi bật agent-web): báo **LỖI** nếu bất kỳ model nào gán `agentRuntime.id = claude-cli`. Runner này chạy NGOÀI sandbox Docker (docs OpenClaw), nên agent khách sẽ chạy lệnh trên máy thật; thử thật trên VM114 báo `sandbox: {mode: off}` (docs/TESTING.md). Cho phép có chủ đích bằng `KIT_ALLOW_CLAUDE_CLI=1`.
 - **kit doctor** kiểm có image sandbox (mặc định `openclaw-sandbox:trixie-slim`; đổi bằng `agents.defaults.sandbox.docker.image` hoặc `KIT_SANDBOX_IMAGE`); thiếu thì LỖI + gợi ý.
