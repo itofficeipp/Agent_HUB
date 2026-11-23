@@ -27,3 +27,13 @@ Thu hồi token: claude.ai/settings/claude-code.
 ## Lưu ý
 - Thiếu image thì agent **dừng hẳn** ("Sandbox image not found"), không chạy ngoài sandbox: an toàn nhưng cần `kit sandbox-image`.
 - Mỗi lượt tốn khoảng 16k token (phần nền cố định ~8k: prompt hệ thống + schema công cụ). Xem số đo trong docs/TESTING.md khi chọn gói.
+
+## Agent tạo qua webhook cần dùng chung credential (ĐÃ THỬ THẬT trên VM114, 24/11)
+Mỗi agent nhân viên do kit tạo (webhook -> provision) có kho credential riêng, ban đầu TRỐNG: lượt đầu lỗi `No API key found for provider "anthropic"`.
+Chọn MỘT agent làm "chủ credential" (nơi đã `paste-token`, thường là `main`) rồi cho mọi agent khác thừa hưởng:
+```
+openclaw config set agents.defaults.authInheritance '{"agentId":"main"}' --strict-json
+```
+Áp dụng không cần khởi động lại Gateway. Kiểm: gửi một lượt tới agent mới, phải trả lời được và `sandboxed: true`. Hủy: `openclaw config unset agents.defaults.authInheritance`.
+Lưu ý: token dùng chung nghĩa là mọi nhân viên của công ty dùng chung hạn mức tài khoản đó. Muốn tách hạn mức thì `paste-token` riêng cho từng agent.
+
