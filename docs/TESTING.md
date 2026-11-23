@@ -39,7 +39,7 @@ Máy: 4 vCPU, 6 GB RAM, đĩa 58 GB, tạo bằng `Javis-KitLab-VM114.sh`; firew
 - `kit update`: chạy lại apply + doctor, "Tất cả OK".
 - `kit setup cty-b` tương tác bằng pty trên máy thật: hiện [1/5]..[4/5], gợi ý + ví dụ, nhập trống hỏi lại, sau 5 lần dừng với "LOI: COMPANY_NAME: nhập sai 5 lần". (Phần nhập giá trị hợp lệ vẫn chỉ kiểm bằng test_local.py; chưa có người thật gõ.)
 - **Reboot thật (anh Dũng duyệt 24/11 00:00)**: `sudo reboot` VM114; sau ~1 phút gateway, receiver, provision.timer tự `active`, healthz `{ok:true}`, `kit --tenant cty-a doctor` "Tất cả OK", timer đã lên lịch lại. Linger bật + 3 unit `enabled`.
-- Lưu ý: `kit setup <ten-moi>` (kể cả `--no-apply`) đặt tenant mới làm tenant mặc định; lệnh `kit doctor` không kèm `--tenant` sẽ kiểm tenant mới (chưa bật module). Dùng `kit --tenant <ten> ...` khi có nhiều tenant.
+- Phát hiện khi thử: ở 0.3.1, `kit setup <ten-moi>` tự đổi tenant mặc định nên `kit doctor` trơn kiểm nhầm tenant mới. **Đã sửa ở 0.3.2** (tenant sau không đổi mặc định; thêm `kit use`). Thử thật trên VM114 với 0.3.2: `kit use cty-a`, `kit init cty-c` giữ mặc định cty-a và in hướng dẫn, `kit use` tenant không có bị từ chối; test_local + test_all PASS.
 - CHƯA THỬ trên VM114: clone repo private bằng khoá deploy; container sandbox chạy thật (cần credential model để agent chạy một lượt); Telegram/tunnel/Caddy thật.
 
 ## CHƯA THỬ THẬT (cần thử ở máy công ty hoặc bước sau, theo thứ tự)
