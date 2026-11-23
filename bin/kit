@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """kit - bộ triển khai OpenClaw nhiều nơi (đa tenant, chỉ Python stdlib).
 
+  kit setup [tenant]             CÀI TỪNG BƯỚC có gợi ý: kiểm tra máy, hỏi thông số, dựng, kiểm tra, nói bước tiếp
+  kit preflight                  chỉ kiểm tra môi trường máy (OpenClaw, Docker, systemd...)
   kit init <tenant>              tạo tenant (công ty/máy) mới
   kit modules                    liệt kê chức năng, trạng thái, bản mới
   kit enable <module>            hỏi tham số, lưu (bí mật -> secrets.env chmod 600)
@@ -98,6 +100,15 @@ def probe_healthz(url):
     except Exception as e:
         print(f"    CẢNH BÁO: chưa gọi được {url}/healthz ({str(e)[:100]}). Kiểm DNS/tunnel/firewall; vẫn lưu tham số.")
 
+def validate_param(spec, val):
+    """Trả về thông báo lỗi tiếng Việt, hoặc '' nếu hợp lệ."""
+    if val == "" and spec.get("required", True) and not spec.get("optional"):
+        return "chưa nhập (bắt buộc)"
+    pat = spec.get("pattern")
+    if val != "" and pat and not re.fullmatch(pat, val):
+        return "sai định dạng" + (f" (ví dụ đúng: {spec['example']})" if spec.get("example") else f" (cần khớp {pat})")
+    return ""
+
 def collect_params(t, mods, sets, interactive):
     params, sec = load_params(t), load_secrets(t)
     getv = lambda k: sets.get(k, params.get(k, sec.get(k)))
@@ -113,14 +124,19 @@ def collect_params(t, mods, sets, interactive):
             elif os.environ.get("KIT_" + k): val = os.environ["KIT_" + k]
             elif interactive:
                 dv = dv0
-                prompt = f"[{m}] {spec['prompt']}" + (f" [{'ẩn' if is_sec else dv}]" if (dv or is_sec) else "") + ": "
-                val = (getpass.getpass(prompt) if is_sec else input(prompt)).strip() or dv
+                print(f"\n[{m}] {spec['prompt']}")
+                if spec.get("hint"): print("   gợi ý: " + spec["hint"])
+                if spec.get("example"): print("   ví dụ: " + spec["example"])
+                for _ in range(5):
+                    ptxt = "   > " + (f"[{'ẩn' if is_sec else dv}] " if (dv or is_sec) else "")
+                    val = (getpass.getpass(ptxt) if is_sec else input(ptxt)).strip() or dv
+                    err = validate_param(spec, val)
+                    if not err: break
+                    print("   ! " + err + "; nhập lại")
+                else: die(f"{k}: nhập sai 5 lần")
             else: val = dv0
-            if val == "" and spec.get("required", True) and not spec.get("optional"):
-                die(f"thiếu tham số {k} ({spec['prompt']}); dùng --set {k}=... hoặc chạy tương tác")
-            pat = spec.get("pattern")
-            if val != "" and pat and not re.fullmatch(pat, val):
-                die(f"{k} sai định dạng (cần khớp {pat})")
+            err = validate_param(spec, val)
+            if err: die(f"{k}: {err}; dùng --set {k}=... hoặc chạy tương tác")
             (sec if is_sec else params)[k] = val
             if val and spec.get("probe") == "healthz" and interactive and not os.environ.get("KIT_NO_PROBE"): probe_healthz(val)
     save_params(t, params); save_secrets(t, sec)
@@ -206,6 +222,129 @@ def apply_module(t, name, ctx, dry):
             r = subprocess.run(argv, env=dict(os.environ, KIT_TENANT=t, KIT_HOME=str(CFG), KIT_ROOT=str(ROOT)))
             if r.returncode != 0: die(f"post_apply thất bại rc={r.returncode}: {argv[0]}")
     return man["version"]
+
+# ---------- preflight / setup ----------
+def preflight(mods=()):
+    """In kết quả kiểm tra máy; trả về số mục LỖI (cảnh báo không tính)."""
+    bad = 0
+    def chk(level, ok, msg, hint=""):
+        nonlocal bad
+        tag = "OK       " if ok else ("LOI      " if level == "err" else "CANH BAO ")
+        print("  " + tag + msg + ("" if ok else f"\n           -> {hint}"))
+        if not ok and level == "err": bad += 1
+    chk("err", os.getuid() != 0, "đang chạy bằng user thường", "đừng dùng root; tạo user riêng (vd: sudo adduser openclaw) rồi đăng nhập lại")
+    chk("err", sys.version_info >= (3, 9), f"python {sys.version.split()[0]}", "cần >= 3.9")
+    chk("err", bool(shutil.which("git")), "git", "sudo apt install -y git")
+    if oc_available(): chk("err", True, "openclaw " + (run([OC, "--version"]).stdout.strip() or "?"))
+    else: chk("err", False, "openclaw", "cài: curl -fsSL https://openclaw.ai/install.sh | bash, rồi: openclaw onboard --install-daemon")
+    chk("warn", bool(shutil.which("node")), "node", "trình cài OpenClaw thường tự cài Node; nếu thiếu xem docs OpenClaw")
+    sysd = Path("/run/systemd/system").exists() and bool(shutil.which("systemctl"))
+    chk("warn", sysd, "systemd (dịch vụ nền)", "máy không dùng systemd: dịch vụ nền (receiver, timer) phải tự chạy; thử trong Docker/WSL sẽ thiếu mục này")
+    if sysd and shutil.which("loginctl"):
+        lg = run(["loginctl", "show-user", os.environ.get("USER") or str(os.getuid()), "-p", "Linger"]).stdout
+        chk("warn", "yes" in lg, "dịch vụ user chạy nền khi không đăng nhập (linger)", "sudo loginctl enable-linger $USER")
+    if set(mods) & {"agent-web", "n8n"}:
+        dk = bool(shutil.which("docker"))
+        chk("warn", dk, "docker (agent chạy trong sandbox; n8n cũng cần)", "cài Docker Engine theo docs.docker.com/engine/install/ubuntu rồi: sudo usermod -aG docker $USER (đăng nhập lại)")
+        if dk: chk("warn", run(["docker", "info"]).returncode == 0, "user hiện tại dùng được docker (không cần sudo)", "sudo usermod -aG docker $USER rồi đăng nhập lại")
+    free = shutil.disk_usage(str(USER_HOME)).free / 2**30
+    chk("warn", free >= 5, f"dung lượng trống {free:.1f} GB (khuyên >= 5 GB; image sandbox khá nặng)", "giải phóng ổ đĩa hoặc mở rộng đĩa")
+    print("  => " + ("sẵn sàng" if not bad else f"{bad} mục LỖI cần sửa trước khi cài"))
+    return bad
+
+def cmd_preflight(a):
+    t = a.tenant or ((CFG / "current").read_text().strip() if (CFG / "current").exists() else None)
+    st = load_state(t) if t and tdir(t).exists() else {"enabled": []}
+    sys.exit(1 if preflight(st["enabled"] or ["agent-web"]) else 0)
+
+def yesno(q, default=True, interactive=True):
+    if not interactive: return default
+    while True:
+        r = input(f"{q} [{'Y/n' if default else 'y/N'}]: ").strip().lower()
+        if not r: return default
+        if r in ("y", "yes", "c", "co", "có"): return True
+        if r in ("n", "no", "k", "khong", "không"): return False
+
+def kit_cmd(t, *args):
+    return subprocess.run([sys.executable, str(Path(__file__).resolve()), "--tenant", t, *args]).returncode
+
+def cmd_setup(a):
+    inter = not a.yes and sys.stdin.isatty()
+    print(f"== kit {VERSION}: cài đặt từng bước. Chạy lại bất cứ lúc nào an toàn (giá trị đã nhập được giữ; muốn đổi: kit enable <module> --set KEY=giá_trị).")
+    print("\n[1/5] Kiểm tra máy")
+    bad = preflight(["agent-web"])
+    if bad and not yesno("   Còn mục LỖI. Vẫn tiếp tục?", False, inter):
+        die("dừng: sửa các mục LỖI ở trên rồi chạy lại 'kit setup'" if inter else "preflight có LỖI")
+    print("\n[2/5] Tên công ty/máy (tenant): mỗi công ty một tenant riêng, tham số và bí mật tách biệt")
+    existing = sorted(p.name for p in tenants_dir().glob("*")) if tenants_dir().exists() else []
+    t = a.name or a.tenant
+    if not t:
+        if inter:
+            if existing: print("   đã có:", ", ".join(existing), "(nhập trùng tên = tiếp tục cấu hình tenant đó)")
+            print("   gợi ý: a-z, 0-9, _ hoặc -, 2-31 ký tự. Ví dụ: congty-abc")
+            for _ in range(5):
+                t = input("   > ").strip()
+                if re.fullmatch(r"[a-z0-9][a-z0-9_-]{1,30}", t): break
+                print("   ! chỉ gồm a-z 0-9 _ - (2-31 ký tự); nhập lại")
+            else: die("tên tenant sai 5 lần")
+        elif len(existing) == 1: t = existing[0]
+        else: die("cần tên tenant: kit setup <ten-cong-ty>")
+    if not re.fullmatch(r"[a-z0-9][a-z0-9_-]{1,30}", t): die("tên tenant: a-z 0-9 _ - (2-31 ký tự)")
+    if not tdir(t).exists(): cmd_init(argparse.Namespace(name=t))
+    else: (CFG / "current").write_text(t + "\n"); print(f"   dùng tenant có sẵn '{t}'")
+    st = load_state(t)
+    print("\n[3/5] Chọn chức năng")
+    names = module_names()
+    if a.modules:
+        chosen = [x.strip() for x in a.modules.split(",") if x.strip()]
+        miss = [x for x in chosen if x not in names]
+        if miss: die("module không có: " + ",".join(miss))
+    else:
+        chosen = []
+        for n in names:
+            m = manifest(n); dflt = n in ("base", "agent-web") or n in st["enabled"]
+            print(f"   - {n}: {m['title']}")
+            if n == "base" or yesno(f"     bật '{n}'?", dflt, inter): chosen.append(n)
+    mods = with_deps(chosen)
+    print("   sẽ bật:", ", ".join(mods))
+    print("\n[4/5] Thông số của công ty (Enter = nhận giá trị trong [ ]; bí mật nhập ẩn, lưu chmod 600)")
+    sets = dict(x.split("=", 1) for x in (a.set or []))
+    if a.params_file:
+        for k, v in json.loads(Path(a.params_file).read_text()).items():
+            if not k.startswith("_"): sets.setdefault(k, str(v))
+    params, sec = collect_params(t, mods, sets, interactive=inter)
+    ctx_get = lambda k: params.get(k, sec.get(k))
+    print("\n   Tóm tắt:")
+    for m in mods:
+        for spec in manifest(m).get("params", []):
+            if not cond_ok(spec, ctx_get): continue
+            k = spec["key"]; v = sec.get(k) if spec.get("secret") else params.get(k)
+            print(f"     {k:<20} = " + ("(đã lưu, ẩn)" if spec.get("secret") and v else (v if v not in (None, "") else "(trống)")))
+    if not yesno("   Đúng chưa? Lưu và dựng thử (chưa ghi gì, chỉ xem trước)", True, inter): die("đã dừng; chạy lại 'kit setup' để sửa (hoặc kit enable <module> --set KEY=...)")
+    for m in mods:
+        if m not in st["enabled"]: st["enabled"].append(m)
+    save_state(t, st)
+    print("\n[5/5] Dựng và kiểm tra")
+    ns = argparse.Namespace(tenant=t, module=None, dry_run=True)
+    cmd_apply(ns)
+    if a.no_apply: print("\nĐã dừng trước khi dựng (--no-apply). Khi sẵn sàng: kit apply"); return
+    if not yesno("\n   Xem trước ổn. Dựng thật (tự sao lưu openclaw.json trước)?", True, inter): print("Chưa dựng. Khi sẵn sàng: kit apply"); return
+    ns.dry_run = False; cmd_apply(ns)
+    if "agent-web" in mods and ctx_get("AW_BACKEND") == "local":
+        if not (tdir(t) / "agent-web" / "gateway_pub.pem").exists() and yesno("\n   Tạo khoá mã hoá trên Gateway (kit run agent-web keygen)?", True, inter): kit_cmd(t, "run", "agent-web", "keygen")
+        if inter and not (tdir(t) / "agent-web" / "users.json").exists() and yesno("\n   Tạo bên gọi webhook đầu tiên (hệ thống web/HRM gọi vào)? Mật khẩu chỉ in 1 lần, hãy lưu ngay", True, inter):
+            cn = input("   tên bên gọi (vd hrm) [web]: ").strip() or "web"
+            kit_cmd(t, "run", "agent-web", "add-caller", cn)
+    print("\n== Kiểm tra (kit doctor)")
+    cmd_doctor(argparse.Namespace(tenant=t))
+    print(f"""
+== BƯỚC TIẾP
+  1. Mục LOI ở doctor về 'bên gọi'/'địa chỉ công khai' là bình thường nếu chưa tạo bên gọi hoặc chưa cấu hình tunnel/Caddy:
+       kit run agent-web add-caller <ten>        tạo bên gọi (in mật khẩu 1 lần)
+       xem hướng dẫn ra Internet: {tdir(t)}/agent-web/expose/HUONG_DAN.md
+  2. Bật dịch vụ nền khi sẵn sàng (nếu AW_AUTOSTART=no): xem dòng GỢI Ý ở phần dựng phía trên.
+  3. Thử webhook đủ các ca: kit run agent-web test-webhook --user <ten> --password <mk> --secret <hmac_key>
+  4. Cập nhật kit về sau: kit update""")
 
 def cmd_init(a):
     t = a.name
@@ -306,6 +445,8 @@ def cmd_export(a):
 def main():
     p = argparse.ArgumentParser(prog="kit", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--tenant"); sp = p.add_subparsers(dest="cmd", required=True)
+    s = sp.add_parser("setup"); s.add_argument("name", nargs="?"); s.add_argument("--modules", help="vd base,agent-web (mặc định: hỏi)"); s.add_argument("--set", action="append"); s.add_argument("--params-file"); s.add_argument("--yes", action="store_true", help="không hỏi: dùng --set/--params-file/mặc định"); s.add_argument("--no-apply", action="store_true", help="chỉ lưu + xem trước, không dựng"); s.set_defaults(f=cmd_setup)
+    s = sp.add_parser("preflight"); s.set_defaults(f=cmd_preflight)
     s = sp.add_parser("init"); s.add_argument("name"); s.set_defaults(f=cmd_init)
     s = sp.add_parser("modules"); s.set_defaults(f=cmd_modules)
     s = sp.add_parser("enable"); s.add_argument("module"); s.add_argument("--set", action="append"); s.add_argument("--params-file", help="JSON tham số KHÔNG bí mật (xem examples/)"); s.add_argument("--yes", action="store_true"); s.set_defaults(f=cmd_enable)

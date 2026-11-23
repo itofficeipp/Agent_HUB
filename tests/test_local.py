@@ -209,6 +209,75 @@ r = sh([sys.executable, T + "/cfg/tenants/t8/agent-web/orchestrator/provision.py
 cf = json.load(open(ENV["FAKE_OC_CFG"])); nw = cf["agents"]["entries"]["u_tt_new"]["tools"]
 ok(r.returncode == 0 and "OK mo cong cu" in r.stdout and nw["sandbox"]["tools"]["alsoAllow"] == ["web_search", "web_fetch", "browser"] and "group:runtime" not in nw["deny"], "provision.py: agent moi tao duoc mo cong cu tu dong (AW_TOOLS_WEB=yes)", r.stdout + r.stderr)
 
+# ---- 11. kit setup: cai tung buoc co goi y (tuong tac qua pty + khong tuong tac) + preflight ----
+import pty, select
+def drive(argv, rules, env, tmo=120):
+    """Chay lenh trong pty, tra loi cac cau hoi theo rules [(regex, [cac tra loi lan luot])]; chua khop = Enter."""
+    pid, fd = pty.fork()
+    if pid == 0:
+        os.execvpe(argv[0], argv, env)
+    out = ""; seg = ""; t0 = time.time(); used = {}
+    while time.time() - t0 < tmo:
+        r, _, _ = select.select([fd], [], [], 0.6)
+        if r:
+            try: d = os.read(fd, 4096).decode("utf-8", "replace")
+            except OSError: break
+            if not d: break
+            out += d; seg += d; continue
+        # im lang: dang cho nhap
+        if not seg.strip(): continue
+        ans = ""
+        for i, (rx, lst) in enumerate(rules):
+            if re.search(rx, out[out.rfind("\r\n\r\n"):]):
+                n = used.get(i, 0)
+                if n < len(lst): ans = lst[n]; used[i] = n + 1
+                break
+        os.write(fd, (ans + "\n").encode()); seg = ""
+    try: _, st = os.waitpid(pid, 0)
+    except ChildProcessError: st = 0
+    return os.waitstatus_to_exitcode(st), out
+
+pp = freeport()
+rules = [
+    (r"Ví dụ: congty-abc", ["Sai Ten!", "cty-pty"]),
+    (r"Tên công ty/đơn vị", ["", "Cty Pty"]),
+    (r"Tên người chủ", ["Chu Pty"]),
+    (r"\[base\] Múi giờ", ["gio sai", ""]),
+    (r"Thư mục workspace của agent chính", [H + "/wspty"]),
+    (r"Cổng receiver", [str(pp)]),
+    (r"Địa chỉ công khai", ["https://agents.pty.example.invalid"]),
+    (r"Thư mục workspace các agent", [H + "/agpty"]),
+    (r"tên bên gọi", ["hrm"]),
+]
+rc, out = drive(KIT + ["setup"], rules, ENV)
+ok(rc == 0, "kit setup (tuong tac): ket thuc rc=0", out[-1200:][-600:])
+ok("gợi ý:" in out and "ví dụ:" in out, "kit setup: hien goi y + vi du khi hoi")
+ok("chưa nhập (bắt buộc)" in out and "sai định dạng" in out and "nhập lại" in out, "kit setup: nhap sai thi bao loi va hoi lai (khong thoat)")
+ok("Tóm tắt" in out and out.index("Tóm tắt") < out.index("Dựng và kiểm tra"), "kit setup: co tom tat truoc khi dung")
+SP = T + "/cfg/tenants/cty-pty"
+Pp = json.load(open(SP + "/params.json")) if os.path.exists(SP + "/params.json") else {}
+ok(Pp.get("COMPANY_NAME") == "Cty Pty" and Pp.get("OWNER_NAME") == "Chu Pty" and Pp.get("TIMEZONE") == "Asia/Ho_Chi_Minh" and Pp.get("AW_LISTEN_PORT") == str(pp), "kit setup: luu dung gia tri (sau khi nhap lai), mac dinh khi Enter", Pp)
+stp = json.load(open(SP + "/state.json")) if os.path.exists(SP + "/state.json") else {}
+ok(set(stp.get("applied", {})) >= {"base", "agent-web"} and "n8n" not in stp.get("enabled", []), "kit setup: da bat + apply base, agent-web; n8n khong bat", stp)
+ok(os.path.exists(SP + "/agent-web/gateway_pub.pem") and os.path.exists(SP + "/agent-web/users.json") and "hrm" in open(SP + "/agent-web/users.json").read(), "kit setup: da keygen + tao ben goi 'hrm'")
+ok("kit doctor" in out and "BƯỚC TIẾP" in out, "kit setup: chay doctor va in buoc tiep")
+ok("sk-" not in out, "kit setup: khong in bi mat ra man hinh")
+# khong tuong tac
+cfgf = T + "/p11.json"; json.dump({"COMPANY_NAME": "Cty 11", "OWNER_NAME": "Chu 11", "WORKSPACE_DIR": H + "/ws11", "AW_LISTEN_PORT": str(freeport()), "AW_PUBLIC_URL": "https://a11.example.invalid", "AW_AGENT_ROOT": H + "/ag11", "_ghi_chu": "bo qua"}, open(cfgf, "w"))
+r = sh(KIT + ["setup", "cty-11", "--yes", "--modules", "base,agent-web", "--params-file", cfgf, "--no-apply"]); ok(r.returncode == 0 and "--no-apply" in r.stdout and "cty-11" in os.listdir(T + "/cfg/tenants"), "kit setup --yes --no-apply: luu + xem truoc, khong dung", r.stdout[-400:] + r.stderr)
+ok(json.load(open(T + "/cfg/tenants/cty-11/state.json")).get("applied", {}) == {}, "kit setup --no-apply: chua apply gi")
+r = sh(KIT + ["setup", "cty-11", "--yes", "--modules", "base,agent-web", "--params-file", cfgf]); ok(r.returncode == 0 and "BƯỚC TIẾP" in r.stdout, "kit setup --yes: dung thuc + doctor + buoc tiep", r.stdout[-300:] + r.stderr)
+ok(set(json.load(open(T + "/cfg/tenants/cty-11/state.json"))["applied"]) >= {"base", "agent-web"}, "kit setup --yes (tenant co san): da apply", r.stdout[-400:] + r.stderr)
+r = sh(KIT + ["setup", "cty-12", "--yes", "--modules", "base", "--no-apply"]); ok(r.returncode != 0 and "COMPANY_NAME" in r.stderr, "kit setup --yes thieu tham so bat buoc: loi ro, nen noi ten tham so", r.stderr)
+r = sh(KIT + ["setup", "cty-13", "--yes", "--modules", "khong-co"]); ok(r.returncode != 0 and "khong-co" in r.stderr, "kit setup: module khong ton tai bi tu choi", r.stderr)
+r = sh(KIT + ["setup", "--yes"]); ok(r.returncode != 0 and "tên tenant" in r.stderr, "kit setup --yes khi co nhieu tenant ma khong chi ten: tu choi", r.stderr)
+r = sh(KIT + ["preflight"]); ok(r.returncode == 0 and "openclaw" in r.stdout and "sẵn sàng" in r.stdout, "kit preflight: OK voi openclaw gia", r.stdout[-400:])
+env2 = dict(ENV, OPENCLAW_BIN="/khong/co/openclaw"); r = sh(KIT + ["preflight"], env=env2); ok(r.returncode == 1 and "LOI" in r.stdout and "openclaw onboard" in r.stdout, "kit preflight: thieu openclaw -> LOI + goi y cai", r.stdout[-400:])
+# moi module.json: moi tham so co hint
+for mn in ("base", "agent-web", "n8n"):
+    miss = [s["key"] for s in json.load(open(ROOT + "/modules/" + mn + "/module.json"))["params"] if not s.get("hint")]
+    ok(not miss, "module " + mn + ": moi tham so deu co goi y (hint)", miss)
+
 print("\n=== KET QUA test_local:", "TAT CA PASS" if not bad else str(bad) + " LOI", "(thu muc tam:", T + ")")
 if not bad: shutil.rmtree(T, ignore_errors=True)
 sys.exit(1 if bad else 0)

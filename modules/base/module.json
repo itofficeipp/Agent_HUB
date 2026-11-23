@@ -9,35 +9,47 @@
     {
       "key": "COMPANY_NAME",
       "prompt": "Tên công ty/đơn vị",
-      "required": true
+      "required": true,
+      "hint": "Tên hiển thị của công ty, được ghi vào file AGENTS/USER của trợ lý.",
+      "example": "Công ty TNHH ABC"
     },
     {
       "key": "OWNER_NAME",
       "prompt": "Tên người chủ/quản trị (xưng hô)",
-      "required": true
+      "required": true,
+      "hint": "Cách trợ lý xưng hô với người chủ/quản trị.",
+      "example": "anh Nam"
     },
     {
       "key": "ASSISTANT_NAME",
       "prompt": "Tên trợ lý",
-      "default": "Javis"
+      "default": "Javis",
+      "hint": "Tên của trợ lý (tuỳ ý).",
+      "example": "Javis"
     },
     {
       "key": "TIMEZONE",
       "prompt": "Múi giờ",
       "default": "Asia/Ho_Chi_Minh",
-      "pattern": "[A-Za-z_]+/[A-Za-z_]+"
+      "pattern": "[A-Za-z_]+/[A-Za-z_]+",
+      "hint": "Dạng Vùng/Thành_phố theo danh sách IANA.",
+      "example": "Asia/Ho_Chi_Minh"
     },
     {
       "key": "PRIMARY_MODEL",
       "prompt": "Model chính (provider/model)",
       "default": "anthropic/claude-sonnet-5-5",
-      "pattern": "[a-z0-9-]+/[A-Za-z0-9._:-]+"
+      "pattern": "[a-z0-9-]+/[A-Za-z0-9._:-]+",
+      "hint": "provider/model. Phải là model đã đăng nhập/cấu hình ở bước \"openclaw onboard\".",
+      "example": "anthropic/claude-sonnet-5-5"
     },
     {
       "key": "WORKSPACE_DIR",
       "prompt": "Thư mục workspace của agent chính",
       "default": "~/.openclaw/workspace",
-      "pattern": "[^\\s]+"
+      "pattern": "[^\\s]+",
+      "hint": "Nơi chứa file persona của trợ lý chính. Cứ Enter nếu chưa có yêu cầu khác.",
+      "example": "~/.openclaw/workspace"
     }
   ],
   "files": [

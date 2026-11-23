@@ -16,7 +16,9 @@
         "key": "AW_N8N_URL",
         "value": "n8n"
       },
-      "pattern": "local|n8n"
+      "pattern": "local|n8n",
+      "hint": "Chọn \"local\" nếu công ty CHƯA có n8n (kit chạy receiver sẵn, đơn giản nhất). Chọn \"n8n\" nếu đã có n8n.",
+      "example": "local"
     },
     {
       "key": "AW_N8N_URL",
@@ -25,7 +27,9 @@
       "when": {
         "AW_BACKEND": "n8n"
       },
-      "probe": "healthz"
+      "probe": "healthz",
+      "hint": "Địa chỉ n8n của công ty, gồm http/https, không có dấu / cuối.",
+      "example": "https://n8n.congty.vn"
     },
     {
       "key": "AW_N8N_API_KEY",
@@ -33,13 +37,16 @@
       "secret": true,
       "when": {
         "AW_BACKEND": "n8n"
-      }
+      },
+      "hint": "Tạo trong n8n: Settings > n8n API. Nhập ẩn, lưu chmod 600, không vào git."
     },
     {
       "key": "AW_WEBHOOK_PATH",
       "prompt": "Đường dẫn webhook (bí mật, ngẫu nhiên)",
       "default": "random:hex12",
-      "pattern": "[A-Za-z0-9_-]{8,64}"
+      "pattern": "[A-Za-z0-9_-]{8,64}",
+      "hint": "Đoạn cuối URL webhook; cứ Enter để kit tự sinh chuỗi ngẫu nhiên (khó đoán, an toàn hơn tự đặt).",
+      "example": "a1b2c3d4e5f6"
     },
     {
       "key": "AW_WORKFLOW_NAME",
@@ -47,7 +54,8 @@
       "default": "Tool Openclaw - Agent Web Tạo user",
       "when": {
         "AW_BACKEND": "n8n"
-      }
+      },
+      "hint": "Tên workflow sẽ tạo trong n8n."
     },
     {
       "key": "AW_REGISTRY_TABLE_ID",
@@ -58,7 +66,8 @@
       "default": "",
       "when": {
         "AW_BACKEND": "n8n"
-      }
+      },
+      "hint": "Để trống ở lần đầu; chạy \"kit run agent-web tables\" để tạo bảng và lấy ID."
     },
     {
       "key": "AW_CHANNEL_TABLE_ID",
@@ -69,7 +78,8 @@
       "default": "",
       "when": {
         "AW_BACKEND": "n8n"
-      }
+      },
+      "hint": "Để trống ở lần đầu; chạy \"kit run agent-web tables\"."
     },
     {
       "key": "AW_ERROR_WORKFLOW_ID",
@@ -79,7 +89,8 @@
       "default": "",
       "when": {
         "AW_BACKEND": "n8n"
-      }
+      },
+      "hint": "Không bắt buộc. ID workflow n8n sẽ chạy khi có lỗi."
     },
     {
       "key": "AW_LISTEN_PORT",
@@ -88,7 +99,9 @@
       "pattern": "[1-9][0-9]{2,4}",
       "when": {
         "AW_BACKEND": "local"
-      }
+      },
+      "hint": "Cổng nội bộ của receiver, chỉ nghe 127.0.0.1 nên không lộ ra ngoài. Cứ Enter nếu cổng 8787 chưa bị dùng.",
+      "example": "8787"
     },
     {
       "key": "AW_EXPOSE",
@@ -97,7 +110,9 @@
       "pattern": "tunnel|port|none",
       "when": {
         "AW_BACKEND": "local"
-      }
+      },
+      "hint": "tunnel = Cloudflare Tunnel, không mở cổng, nên chọn nếu có tài khoản Cloudflare. port = mở 80/443 + Caddy, cần IP công khai và tên miền. none = chỉ dùng trong LAN/VPN.",
+      "example": "tunnel"
     },
     {
       "key": "AW_PUBLIC_URL",
@@ -109,50 +124,66 @@
           "tunnel",
           "port"
         ]
-      }
+      },
+      "hint": "Địa chỉ HTTPS mà hệ thống web bên ngoài sẽ gọi vào. Tên miền phải trỏ về tunnel/máy này. Không có / cuối.",
+      "example": "https://agents.congty.vn"
     },
     {
       "key": "AW_GATEWAY_ID",
       "prompt": "Mã Gateway chạy các agent này",
       "default": "gw1",
-      "pattern": "[a-z0-9_-]{2,20}"
+      "pattern": "[a-z0-9_-]{2,20}",
+      "hint": "Mã định danh Gateway (a-z, 0-9, _ -). Nhiều Gateway thì mỗi máy một mã.",
+      "example": "gw1"
     },
     {
       "key": "AW_GATEWAY_SSH",
       "prompt": "Máy Gateway: 'local' hoặc user@host (SSH khoá, không mật khẩu)",
       "default": "local",
-      "pattern": "local|[A-Za-z0-9_.-]+@[A-Za-z0-9_.-]+"
+      "pattern": "local|[A-Za-z0-9_.-]+@[A-Za-z0-9_.-]+",
+      "hint": "\"local\" nếu Gateway OpenClaw chạy CHÍNH máy này. Nếu ở máy khác, nhập user@IP; cần đăng nhập SSH bằng khoá, không mật khẩu.",
+      "example": "local"
     },
     {
       "key": "AW_GATEWAY_SSH_KEY",
       "prompt": "Khoá SSH tới Gateway (bỏ trống nếu local)",
       "required": false,
       "optional": true,
-      "default": ""
+      "default": "",
+      "hint": "Đường dẫn khoá riêng SSH tới Gateway. Bỏ trống nếu AW_GATEWAY_SSH=local.",
+      "example": "~/.ssh/khoa_gateway"
     },
     {
       "key": "AW_GATEWAY_DIR",
       "prompt": "Thư mục script trên Gateway",
       "default": "~/openclaw-kit-agentweb",
-      "pattern": "[~A-Za-z0-9_./-]+"
+      "pattern": "[~A-Za-z0-9_./-]+",
+      "hint": "Thư mục kit đẩy script provision lên Gateway. Cứ Enter.",
+      "example": "~/openclaw-kit-agentweb"
     },
     {
       "key": "AW_AGENT_ROOT",
       "prompt": "Thư mục workspace các agent trên Gateway",
       "default": "/srv/agents",
-      "pattern": "/[A-Za-z0-9_./-]+"
+      "pattern": "/[A-Za-z0-9_./-]+",
+      "hint": "Thư mục gốc chứa workspace của từng agent nhân viên. Phải tạo trước và user chạy Gateway có quyền ghi (sudo mkdir -p /srv/agents && sudo chown $USER /srv/agents).",
+      "example": "/srv/agents"
     },
     {
       "key": "AW_MCP_PROFILE",
       "prompt": "Hồ sơ MCP (example | none | tên file trong profiles/)",
       "default": "none",
-      "pattern": "[a-z0-9_-]+"
+      "pattern": "[a-z0-9_-]+",
+      "hint": "\"none\" = không gắn MCP. \"example\" = dùng mẫu trong modules/agent-web/profiles/ để sửa theo công ty. Hoặc tên file hồ sơ của anh/chị.",
+      "example": "none"
     },
     {
       "key": "AW_TOOLS_WEB",
       "prompt": "Mở thêm công cụ cho agent: tìm web + đọc trang web (web_search, web_fetch) (yes/no; tắt = giữ cấu hình chặt mặc định)",
       "default": "no",
-      "pattern": "yes|no"
+      "pattern": "yes|no",
+      "hint": "\"no\" (khuyên dùng lúc đầu) giữ cấu hình chặt: agent chỉ dùng công cụ trong sandbox. \"yes\" cho agent tìm web và đọc trang web.",
+      "example": "no"
     },
     {
       "key": "AW_TOOLS_BROWSER",
@@ -161,7 +192,9 @@
       "pattern": "yes|no",
       "when": {
         "AW_TOOLS_WEB": "yes"
-      }
+      },
+      "hint": "Chỉ hỏi khi bật tools web. Browser chạy trong sandbox, tốn RAM; cần image sandbox có trình duyệt.",
+      "example": "no"
     },
     {
       "key": "AW_TOOLS_RUNTIME",
@@ -170,7 +203,9 @@
       "pattern": "yes|no",
       "when": {
         "AW_TOOLS_WEB": "yes"
-      }
+      },
+      "hint": "Chỉ hỏi khi bật tools web. Cho agent chạy lệnh/đọc ghi file TRONG sandbox của chính nó (không chạm máy chủ). Cân nhắc rủi ro trước khi bật.",
+      "example": "no"
     },
     {
       "key": "AW_SANDBOX_IMAGE",
@@ -180,7 +215,9 @@
       "default": "",
       "when": {
         "AW_TOOLS_WEB": "yes"
-      }
+      },
+      "hint": "Để trống = giữ image mặc định của OpenClaw. Chỉ đổi nếu đã build/pull image riêng.",
+      "example": "openclaw-sandbox-office:bookworm"
     },
     {
       "key": "AW_SEARCH_PROVIDER",
@@ -190,7 +227,9 @@
       "default": "",
       "when": {
         "AW_TOOLS_WEB": "yes"
-      }
+      },
+      "hint": "Để trống = giữ cấu hình web search hiện có.",
+      "example": "parallel-free"
     },
     {
       "key": "AW_FULL_AGENTS",
@@ -200,25 +239,33 @@
       "default": "",
       "when": {
         "AW_TOOLS_WEB": "yes"
-      }
+      },
+      "hint": "Chỉ điền agent_id của người ĐÃ được duyệt cấp quyền rộng (hiếm). Nhiều ID cách nhau dấu phẩy. Trống = không ai.",
+      "example": "u_abc123"
     },
     {
       "key": "AW_ALERT_CHANNEL",
       "prompt": "Kênh báo lỗi",
-      "default": "telegram"
+      "default": "telegram",
+      "hint": "Kênh gửi cảnh báo lỗi provision. Cứ Enter nếu dùng Telegram.",
+      "example": "telegram"
     },
     {
       "key": "AW_ALERT_TARGET",
       "prompt": "Người/nhóm nhận báo lỗi (chat id; trống = chỉ ghi log)",
       "required": false,
       "optional": true,
-      "default": ""
+      "default": "",
+      "hint": "chat id Telegram người/nhóm nhận cảnh báo. Trống = chỉ ghi log, không gửi tin.",
+      "example": "123456789"
     },
     {
       "key": "AW_STATS",
       "prompt": "Bật thống kê token theo người (yes/no)",
       "default": "no",
-      "pattern": "yes|no"
+      "pattern": "yes|no",
+      "hint": "yes = ghi thống kê token theo từng người ra CSV để tính chi phí. no = tắt.",
+      "example": "no"
     },
     {
       "key": "AW_STATS_TARGET",
@@ -228,7 +275,9 @@
       "default": "",
       "when": {
         "AW_STATS": "yes"
-      }
+      },
+      "hint": "chat id Telegram nhận báo cáo token hằng ngày. Trống = chỉ ghi CSV.",
+      "example": "123456789"
     },
     {
       "key": "AW_STATS_TIME",
@@ -237,13 +286,17 @@
       "pattern": "([01][0-9]|2[0-3]):[0-5][0-9]",
       "when": {
         "AW_STATS": "yes"
-      }
+      },
+      "hint": "Giờ gửi báo cáo (24h, giờ máy).",
+      "example": "08:00"
     },
     {
       "key": "AW_AUTOSTART",
       "prompt": "Bật timer provision ngay (yes/no)",
       "default": "no",
-      "pattern": "yes|no"
+      "pattern": "yes|no",
+      "hint": "\"no\" (khuyên dùng lúc đầu): kit chưa bật dịch vụ nền, bạn kiểm thử xong rồi bật sau. \"yes\": bật ngay receiver + timer provision.",
+      "example": "no"
     }
   ],
   "files": [

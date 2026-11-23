@@ -4,24 +4,33 @@ Bộ triển khai **OpenClaw** cho nhiều công ty/máy từ một repo. Mỗi 
 
 > **Repo này không chứa bí mật.** Mật khẩu/token/API key chỉ nằm ở `~/.config/openclaw-kit/tenants/<tenant>/secrets.env` (chmod 600) trên từng máy, không bao giờ vào git. Xem [docs/SECURITY.md](docs/SECURITY.md).
 
-## Cài trên máy mới (Linux, user thường)
+## Cài trên máy mới (Linux, user thường, KHÔNG dùng root)
+
+Repo này là **private**; máy mới cần quyền đọc (khoá deploy SSH hoặc tài khoản có quyền). Cách nhanh nhất cho mỗi công ty mới:
 
 ```bash
-# 1. Cài OpenClaw + kit
-KIT_REPO=git@github.com:<tai-khoan>/openclaw-kit.git bash <(curl -fsSL https://raw.githubusercontent.com/<tai-khoan>/openclaw-kit/main/install.sh) <ten-cong-ty>
-# (repo private: git clone trước rồi chạy bash openclaw-kit/install.sh <ten-cong-ty>)
+# 1. Lấy kit và cài OpenClaw (nếu thiếu)
+git clone git@github.com:itofficeipp/Agent_HUB.git ~/openclaw-kit
+bash ~/openclaw-kit/install.sh                # cài OpenClaw + lệnh 'kit'; không hỏi gì thêm
 
-# 2. Onboarding OpenClaw (model, Telegram, service Gateway)
+# 2. Đăng nhập model/Telegram của OpenClaw (một lần)
 openclaw onboard --install-daemon
 
-# 3. Chọn chức năng và điền thông số công ty
-kit modules                      # xem danh sách chức năng
-kit enable base                  # tên công ty, chủ, múi giờ, model chính
-kit enable agent-web             # webhook tạo nhân viên + MCP (receiver tích hợp; cách ra Internet; Gateway...)
-kit apply --dry-run              # xem trước, KHÔNG ghi gì
-kit apply                        # dựng thật (tự sao lưu openclaw.json trước)
-kit doctor                       # kiểm tra
+# 3. Cài từng bước CÓ GỢI Ý: kiểm tra máy -> hỏi thông số -> xem trước -> dựng -> kiểm tra
+kit setup congty-abc                          # đổi tên theo công ty; chạy lại bất cứ lúc nào cũng an toàn
 ```
+
+`kit setup` hỏi từng thông số, mỗi câu có **gợi ý + ví dụ**, nhập sai thì báo và hỏi lại, bí mật nhập ẩn (lưu chmod 600, không vào git), có bản **tóm tắt** trước khi dựng, rồi `apply --dry-run` → `apply` → `doctor` và in **bước tiếp**.
+
+Muốn chạy không hỏi (nhiều công ty, điền sẵn): copy `examples/congty.params.json`, sửa, rồi:
+
+```bash
+kit setup congty-abc --yes --modules base,agent-web --params-file congty-abc.json
+kit setup congty-abc --yes --no-apply ...    # chỉ lưu + xem trước
+kit preflight                                 # chỉ kiểm tra máy
+```
+
+Chạy thủ công từng lệnh (cùng kết quả): `kit init`, `kit enable base`, `kit enable agent-web`, `kit apply --dry-run`, `kit apply`, `kit doctor`.
 
 ## Chức năng (module)
 

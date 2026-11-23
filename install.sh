@@ -4,7 +4,7 @@
 set -euo pipefail
 TENANT="${1:-}"
 KIT_DIR="${KIT_DIR:-$HOME/openclaw-kit}"
-REPO="${KIT_REPO:-}"      # vd: git@github.com:<tai-khoan>/openclaw-kit.git  (bắt buộc nếu chưa clone)
+REPO="${KIT_REPO:-git@github.com:itofficeipp/Agent_HUB.git}"   # repo private: cần khoá deploy/SSH; đổi bằng KIT_REPO=... nếu dùng bản fork
 say(){ printf '\n== %s\n' "$*"; }
 [ "$(id -u)" -ne 0 ] || { echo "Không chạy bằng root."; exit 1; }
 command -v git >/dev/null || { echo "Thiếu git: sudo apt install -y git"; exit 1; }
@@ -16,19 +16,16 @@ if ! command -v openclaw >/dev/null; then
 fi
 openclaw --version
 if [ ! -d "$KIT_DIR/.git" ]; then
-  [ -n "$REPO" ] || { echo "Đặt KIT_REPO=<url git của openclaw-kit> hoặc tự clone vào $KIT_DIR"; exit 1; }
-  say "Lấy kit"; git clone "$REPO" "$KIT_DIR"
+  say "Lấy kit từ $REPO"; git clone "$REPO" "$KIT_DIR" || { echo "Không clone được (repo private?). Cần khoá SSH có quyền đọc, hoặc tự clone vào $KIT_DIR rồi chạy lại."; exit 1; }
 fi
 mkdir -p "$HOME/.local/bin"; ln -sf "$KIT_DIR/bin/kit" "$HOME/.local/bin/kit"
 say "Khởi tạo"
 if [ -n "$TENANT" ]; then "$KIT_DIR/bin/kit" init "$TENANT"; fi
+case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) echo "LƯU Ý: thêm vào PATH: export PATH=\"\$HOME/.local/bin:\$PATH\" (và đưa vào ~/.bashrc)";; esac
 cat <<EOF
 
 Xong phần cài. Bước tiếp (OpenClaw cần được onboarding/đăng nhập model trước):
   openclaw onboard --install-daemon     # model, kênh Telegram, service Gateway
-  kit init <ten-cong-ty>                # nếu chưa truyền tenant
-  kit enable base                       # hỏi tên công ty, múi giờ, model...
-  kit enable agent-web                  # hỏi cách ra Internet (tunnel/port), Gateway, hồ sơ MCP...  (n8n là tuỳ chọn: kit enable n8n)
-  kit apply --dry-run && kit apply
-  kit doctor
+  kit setup <ten-cong-ty>               # hỏi từng thông số có gợi ý, xem trước, dựng, kiểm tra, nói bước tiếp
+  (nhiều công ty/không hỏi: kit setup <ten> --yes --params-file file.json ;  chỉ kiểm máy: kit preflight)
 EOF
