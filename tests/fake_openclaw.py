@@ -23,7 +23,7 @@ elif a[:2] == ["config", "get"]:
     c = load(); v = c.get(a[2])
     if v is None: print(json.dumps({"ok": False})); sys.exit(1)
     print(json.dumps(v))
-elif a[:2] == ["config", "validate"]: print("ok")
+elif a[:2] == ["config", "validate"]: print("ok" + ("\n2 warning(s):\n  ! plugins.entries.duckduckgo: plugin not installed: duckduckgo" if os.environ.get("FAKE_OC_WARN") else ""))
 elif a[:2] == ["agents", "list"]: print(json.dumps([{"id": k} for k in (load().get("agents") or {}).get("entries", {})]))
 elif a[:2] == ["agents", "add"]:
     ws = a[a.index("--workspace") + 1]; os.makedirs(ws, exist_ok=True)

@@ -14,3 +14,12 @@ Quy trình `kit update`: (1) `git pull --ff-only` (2) tuỳ chọn `openclaw upd
 
 ## Viết migration
 `migrations/0001_ten.py`: script Python độc lập, nhận `KIT_TENANT`, `KIT_HOME`, `KIT_ROOT` trong môi trường; exit 0 = xong (kit ghi nhớ, không chạy lại). Phải idempotent.
+
+## Lưu ý theo phiên bản OpenClaw (đã thử thật)
+
+| OpenClaw | Kết quả trên máy sạch (Lab 23/11/2026) |
+|---|---|
+| 2026.10.9 | Phiên bản kit được viết/kiểm thử lúc đầu (min_openclaw). |
+| 2026.11.7 | Cài bằng install.sh chính thức; `kit setup` + `apply` + receiver (systemd) + webhook 8 ca + tạo agent sandbox + mở công cụ web: chạy đúng. Lưu ý: provider web search `duckduckgo` giờ là plugin ngoài, `kit doctor` báo CANH BAO. Muốn web_search chạy bằng DuckDuckGo: `openclaw plugins install npm:@openclaw/duckduckgo-plugin` (hoặc dùng provider khác: `kit enable agent-web --set AW_SEARCH_PROVIDER=...`). |
+
+`kit doctor` in các cảnh báo của `openclaw config validate` (dòng `CANH BAO openclaw:`); cảnh báo không làm kit báo lỗi.

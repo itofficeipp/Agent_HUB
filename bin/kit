@@ -418,6 +418,8 @@ def cmd_doctor(a):
     if oc_available():
         v = run([OC, "--version"]).stdout.strip(); chk(True, f"openclaw {v}")
         r = run([OC, "config", "validate"]); chk(r.returncode == 0, "openclaw config validate", (r.stdout + r.stderr).strip()[-200:])
+        for l in (r.stdout + r.stderr).splitlines():
+            if l.strip().startswith("!"): print("  CANH BAO openclaw: " + l.strip().lstrip("!").strip()[:300])
     else: chk(False, "openclaw", "cài: curl -fsSL https://openclaw.ai/install.sh | bash")
     sp = tdir(t) / "secrets.env"
     if sp.exists(): chk(stat.S_IMODE(sp.stat().st_mode) == 0o600, "secrets.env chmod 600", f"chmod 600 {sp}")
