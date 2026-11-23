@@ -29,6 +29,17 @@ Máy: Ubuntu 24.04 (VM Lab, 38 GB đĩa, chỉ còn ~1,7 GB trống nên KHÔNG 
 - `kit setup` tương tác (gợi ý, nhập sai hỏi lại, tóm tắt) kiểm bằng pty trong tests/test_local.py với openclaw GIẢ; chưa có người thật gõ trên máy thật.
 Đã dọn sạch Lab sau thử (user, home, service, cổng, file tạm); đĩa Lab về 1,7 GB trống như trước.
 
+## ĐÃ THỬ THẬT trên VM114 `kit-lab` (Ubuntu 24.04.5 TRẮNG, Proxmox thật) 23/11/2026
+Máy: 4 vCPU, 6 GB RAM, đĩa 58 GB, tạo bằng `Javis-KitLab-VM114.sh`; firewall Proxmox chỉ cho SSH từ Javis + DNS, mạng nội bộ khác bị chặn, Internet ra được. Máy chưa có Node/Docker/OpenClaw.
+- Cài `docker.io`, user vào nhóm docker, linger; `bash install.sh cty-a` (clone từ bundle git, KHÔNG dùng khoá deploy GitHub): installer tự cài Node 24 + OpenClaw 2026.11.7; `install rc=0`.
+- `kit preflight`: tất cả OK. `openclaw onboard --non-interactive ... --install-daemon`: Gateway systemd user `active`.
+- `kit setup cty-a --yes --modules base,agent-web --params-file`: OK, doctor chỉ có LOI "chưa có bên gọi" (đúng thiết kế) và CANH BAO duckduckgo. Lưu ý: file tham số phải có COMPANY_NAME, OWNER_NAME... (thiếu thì kit báo đúng "COMPANY_NAME: chưa nhập (bắt buộc)").
+- `add-caller` + `test-webhook`: 201/200/409/401/401/422/422/401; `provision`: tạo agent thật + `mo_cong_cu`; `kit doctor`: "Tất cả OK"; 3 service (gateway, receiver, provision.timer) active.
+- `openclaw sandbox explain --agent ...`: runtime sandboxed, mode all, backend docker, workspace mount rw, elevated tắt, deny đúng.
+- `kit update`: chạy lại apply + doctor, "Tất cả OK".
+- `kit setup cty-b` tương tác bằng pty trên máy thật: hiện [1/5]..[4/5], gợi ý + ví dụ, nhập trống hỏi lại, sau 5 lần dừng với "LOI: COMPANY_NAME: nhập sai 5 lần". (Phần nhập giá trị hợp lệ vẫn chỉ kiểm bằng test_local.py; chưa có người thật gõ.)
+- CHƯA THỬ trên VM114: clone repo private bằng khoá deploy; khởi động lại VM rồi kiểm receiver tự chạy (cần anh Dũng duyệt reboot); container sandbox chạy thật (cần credential model để agent chạy một lượt); Telegram/tunnel/Caddy thật.
+
 ## CHƯA THỬ THẬT (cần thử ở máy công ty hoặc bước sau, theo thứ tự)
 1. **Named tunnel** có tên miền riêng + `cloudflared tunnel route dns` + chạy dịch vụ nền; Cloudflare Access. (Quick tunnel và việc kiểm cấu hình đã thử; phần cần tài khoản Cloudflare + zone thì chưa.)
 2. **Mở port thật**: router NAT 80/443, Let's Encrypt xin chứng chỉ, thử từ 4G, CGNAT.
