@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.3.3
+- **install.sh**: mỗi máy/công ty tự sinh khoá deploy riêng (`~/.ssh/agent_hub_deploy`, ed25519, không mật khẩu, chmod 600) khi chưa clone được; in khoá công khai để quản trị viên thêm vào GitHub (Deploy keys, CHỈ ĐỌC). Khoá riêng không rời máy. Sau khi clone, ghi `core.sshCommand` vào repo để `kit update` (git pull) dùng đúng khoá. Đổi đường dẫn khoá bằng `KIT_DEPLOY_KEY`.
+
 ## 0.3.2
 - **Sửa**: `kit init`/`kit setup` tenant thứ hai không còn tự đổi tenant mặc định (phát hiện khi thử trên VM Lab trắng: `kit doctor` trơn kiểm nhầm tenant mới). Tenant đầu tiên vẫn thành mặc định; muốn đổi: `kit use <tenant>` hoặc `--tenant`.
 - Thêm lệnh `kit use <tenant>`; test trong tests/test_local.py.

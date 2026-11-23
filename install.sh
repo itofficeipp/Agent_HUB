@@ -15,8 +15,28 @@ if ! command -v openclaw >/dev/null; then
   export PATH="$HOME/.npm-global/bin:$HOME/.local/bin:$PATH"
 fi
 openclaw --version
+# Khoá deploy CHỈ ĐỌC, riêng cho máy này (mỗi công ty một khoá): sinh tại chỗ, khoá riêng không rời máy.
+DEPLOY_KEY="${KIT_DEPLOY_KEY:-$HOME/.ssh/agent_hub_deploy}"
+SSH_CMD="ssh -i $DEPLOY_KEY -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
 if [ ! -d "$KIT_DIR/.git" ]; then
-  say "Lấy kit từ $REPO"; git clone "$REPO" "$KIT_DIR" || { echo "Không clone được (repo private?). Cần khoá SSH có quyền đọc, hoặc tự clone vào $KIT_DIR rồi chạy lại."; exit 1; }
+  say "Lấy kit từ $REPO"
+  if [ -f "$DEPLOY_KEY" ]; then GIT_SSH_COMMAND="$SSH_CMD" git clone "$REPO" "$KIT_DIR"; else git clone "$REPO" "$KIT_DIR"; fi || {
+    echo "Không clone được (repo private: máy này cần khoá deploy CHỈ ĐỌC)."
+    if [ ! -f "$DEPLOY_KEY" ] && command -v ssh-keygen >/dev/null; then
+      mkdir -p "$(dirname "$DEPLOY_KEY")"; chmod 700 "$(dirname "$DEPLOY_KEY")"
+      ssh-keygen -q -t ed25519 -N "" -C "kit-$(hostname)-$(date +%F)" -f "$DEPLOY_KEY"
+      echo "Đã tạo khoá riêng cho máy này: $DEPLOY_KEY (khoá riêng KHÔNG gửi đi đâu)."
+    fi
+    if [ -f "$DEPLOY_KEY.pub" ]; then
+      echo; echo "Gửi DÒNG DƯỚI (khoá công khai) cho người quản trị repo để thêm vào GitHub -> Agent_HUB -> Settings -> Deploy keys (KHÔNG tích 'Allow write access'):"
+      echo; cat "$DEPLOY_KEY.pub"; echo
+      echo "Sau khi được thêm, chạy lại: bash install.sh $TENANT"
+    else
+      echo "Hoặc tự clone vào $KIT_DIR rồi chạy lại."
+    fi
+    exit 1; }
+  # nhớ khoá cho các lần 'kit update' (git pull) sau này
+  if [ -f "$DEPLOY_KEY" ]; then git -C "$KIT_DIR" config core.sshCommand "$SSH_CMD"; fi
 fi
 mkdir -p "$HOME/.local/bin"; ln -sf "$KIT_DIR/bin/kit" "$HOME/.local/bin/kit"
 say "Khởi tạo"

@@ -6,7 +6,7 @@ Bộ triển khai **OpenClaw** cho nhiều công ty/máy từ một repo. Mỗi 
 
 ## Cài trên máy mới (Linux, user thường, KHÔNG dùng root)
 
-Repo này là **private**; máy mới cần quyền đọc (khoá deploy SSH hoặc tài khoản có quyền). Cách nhanh nhất cho mỗi công ty mới:
+Repo này là **private**; máy mới cần quyền **đọc** (khoá deploy SSH chỉ đọc, riêng cho từng công ty). Cách dễ nhất: chạy `bash install.sh <ten-cong-ty>` — nếu chưa có quyền, installer tự tạo khoá riêng cho máy và in khoá công khai để quản trị viên thêm vào GitHub (Deploy keys, không tích Allow write access), rồi chạy lại (xem docs/NEW_COMPANY.md bước 0). Cách thủ công:
 
 ```bash
 # 1. Lấy kit và cài OpenClaw (nếu thiếu)
