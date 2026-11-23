@@ -289,6 +289,27 @@ sh(KIT + ["setup", "ten-c", "--yes", "--modules", "base", "--no-apply", "--set",
 r = sh(KIT + ["use", "ten-b"], env=E3); ok(r.returncode == 0 and cur() == "ten-b", "kit use ten-b: doi mac dinh", r.stdout + r.stderr)
 r = sh(KIT + ["use", "khong-co"], env=E3); ok(r.returncode != 0 and "ten-a" in r.stderr and cur() == "ten-b", "kit use tenant khong ton tai: tu choi, liet ke tenant co", r.stderr)
 
+# ---- 0.3.4: doctor chặn runner claude-cli (không sandbox) + kit sandbox-image (docker giả) ----
+dk = H + "/bin/docker"; DST = T + "/docker.state"; DLOG = T + "/docker.log"
+open(dk, "w").write("#!/bin/sh\necho \"$@\" >> " + DLOG + "\ncase \"$1 $2\" in\n 'info '*) exit 0;;\n 'image inspect') [ -f " + DST + " ] && exit 0 || exit 1;;\n 'build -t') cat > " + T + "/docker.build.in; touch " + DST + "; exit 0;;\nesac\nexit 0\n"); os.chmod(dk, 0o755)
+CFGP = H + "/.openclaw/openclaw.json"; cfg0 = json.load(open(CFGP))
+def with_cli(on):
+    c = json.loads(json.dumps(cfg0)); c.get("agents", {}).get("defaults", {}).get("sandbox", {}).get("docker", {}).pop("image", None)   # thử tên mặc định
+    if on: c.setdefault("agents", {}).setdefault("defaults", {}).setdefault("models", {})["anthropic/*"] = {"agentRuntime": {"id": "claude-cli"}}
+    json.dump(c, open(CFGP, "w"))
+with_cli(True)
+r = sh(KIT + ["--tenant", "t2", "doctor"]); ok("LOI  model không dùng runner claude-cli" in r.stdout and "/agents/defaults/models/anthropic/*" in r.stdout and "docs/MODEL-AUTH.md" in r.stdout, "doctor 0.3.4: model gán claude-cli -> LOI (khong sandbox) + noi gap + goi y", r.stdout[-700:])
+r = sh(KIT + ["--tenant", "t2", "doctor"], env=dict(ENV, KIT_ALLOW_CLAUDE_CLI="1")); ok("claude-cli được cho phép có chủ đích" in r.stdout and "LOI  model không dùng" not in r.stdout, "KIT_ALLOW_CLAUDE_CLI=1: cho phep co chu dich, van noi ro KHONG sandbox", r.stdout[-400:])
+with_cli(False)
+r = sh(KIT + ["--tenant", "t2", "doctor"]); ok("OK   model không dùng runner claude-cli" in r.stdout, "doctor: khong claude-cli -> OK", r.stdout[-400:])
+ok("LOI  image sandbox openclaw-sandbox:trixie-slim" in r.stdout and "kit sandbox-image" in r.stdout, "doctor: thieu image sandbox -> LOI + lenh kit sandbox-image", r.stdout[-500:])
+r = sh(KIT + ["sandbox-image"]); bi = open(T + "/docker.build.in").read() if os.path.exists(T + "/docker.build.in") else ""
+ok(r.returncode == 0 and "FROM debian:trixie-slim" in bi and "python3" in bi and "USER sandbox" in bi and "build -t openclaw-sandbox:trixie-slim" in open(DLOG).read(), "kit sandbox-image: docker build dung tag + Dockerfile (debian trixie-slim, python3, user sandbox)", r.stdout + r.stderr + bi[:200])
+n0 = open(DLOG).read().count("build -t"); r = sh(KIT + ["sandbox-image"]); ok("đã có" in r.stdout and open(DLOG).read().count("build -t") == n0, "kit sandbox-image lan 2: khong dung lai (idempotent)", r.stdout)
+r = sh(KIT + ["--tenant", "t2", "doctor"]); ok("OK   image sandbox openclaw-sandbox:trixie-slim" in r.stdout, "doctor: co image -> OK", r.stdout[-400:])
+r = sh(KIT + ["sandbox-image", "--force"], env=dict(ENV, KIT_SANDBOX_IMAGE="openclaw-sandbox:bookworm-slim")); ok("FROM debian:bookworm-slim" in open(T + "/docker.build.in").read(), "KIT_SANDBOX_IMAGE doi tag -> base debian tuong ung", r.stdout + r.stderr)
+json.dump(cfg0, open(CFGP, "w"))
+
 # moi module.json: moi tham so co hint
 for mn in ("base", "agent-web", "n8n"):
     miss = [s["key"] for s in json.load(open(ROOT + "/modules/" + mn + "/module.json"))["params"] if not s.get("hint")]

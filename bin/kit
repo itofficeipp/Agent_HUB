@@ -8,7 +8,8 @@
   kit enable <module>            hỏi tham số, lưu (bí mật -> secrets.env chmod 600)
   kit apply [module] [--dry-run] dựng cấu hình/dịch vụ từ mẫu (idempotent)
   kit update [--with-openclaw]   git pull kit + (tuỳ chọn) update OpenClaw + migrations + apply + doctor
-  kit doctor                     kiểm tra môi trường và từng module
+  kit doctor                     kiểm tra môi trường và từng module (gồm sandbox/runtime model)
+  kit sandbox-image [--force]    dựng image Docker sandbox cho agent (OpenClaw không tự dựng)
   kit run <module> <lệnh> ...    lệnh riêng của module (vd agent-web add-caller)
   kit export-config              xuất cấu hình máy hiện tại đã che bí mật (để xem/đưa vào mẫu)
 """
@@ -418,6 +419,51 @@ def cmd_update(a):
         st["migrations"].append(p.name); save_state(t, st)
     a.module = None; a.dry_run = False; cmd_apply(a); cmd_doctor(a)
 
+SANDBOX_IMAGE_DEFAULT = "openclaw-sandbox:trixie-slim"   # OpenClaw 2026.11.7 đòi trixie-slim (docs ghi bookworm-slim là cũ)
+
+def oc_config():
+    """Đọc ~/.openclaw/openclaw.json (JSON). Trả về dict hoặc None nếu không đọc được."""
+    try: return json.loads((USER_HOME / ".openclaw" / "openclaw.json").read_text(encoding="utf-8"))
+    except Exception: return None
+
+def find_cli_runtime(o, path=""):
+    """Liệt kê mọi chỗ trong cấu hình có agentRuntime.id == 'claude-cli' (runner này KHÔNG sandbox)."""
+    out = []
+    if isinstance(o, dict):
+        for k, v in o.items():
+            if k == "agentRuntime" and isinstance(v, dict) and v.get("id") == "claude-cli": out.append(path or "/")
+            else: out += find_cli_runtime(v, path + "/" + str(k))
+    elif isinstance(o, list):
+        for i, v in enumerate(o): out += find_cli_runtime(v, path + "/" + str(i))
+    return out
+
+def sandbox_image_name(cfg):
+    img = os.environ.get("KIT_SANDBOX_IMAGE")
+    if img: return img
+    try: return cfg["agents"]["defaults"]["sandbox"]["docker"]["image"] or SANDBOX_IMAGE_DEFAULT
+    except Exception: return SANDBOX_IMAGE_DEFAULT
+
+def sandbox_dockerfile(image):
+    tag = image.split(":", 1)[1] if ":" in image else "trixie-slim"
+    return f"""FROM debian:{tag}
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends bash ca-certificates curl git jq python3 ripgrep && rm -rf /var/lib/apt/lists/*
+RUN useradd --create-home --shell /bin/bash sandbox
+USER sandbox
+WORKDIR /home/sandbox
+CMD ["sleep", "infinity"]
+"""
+
+def cmd_sandbox_image(a):
+    if not shutil.which("docker"): die("chưa có docker; cài Docker Engine rồi: sudo usermod -aG docker $USER (đăng nhập lại)")
+    img = sandbox_image_name(oc_config() or {})
+    if run(["docker", "image", "inspect", img]).returncode == 0 and not a.force:
+        print(f"Image {img} đã có (dùng --force để dựng lại)."); return
+    print(f"== dựng {img} (khoảng 1 phút, ~300 MB)")
+    r = subprocess.run(["docker", "build", "-t", img, "-"], input=sandbox_dockerfile(img), text=True)
+    if r.returncode != 0: die("docker build thất bại (kiểm tra mạng/quyền docker)")
+    print(f"Xong. Kiểm tra: kit doctor")
+
 def cmd_doctor(a):
     t = current_tenant(a.tenant); bad = 0
     def chk(ok, msg, hint=""):
@@ -435,6 +481,19 @@ def cmd_doctor(a):
     sp = tdir(t) / "secrets.env"
     if sp.exists(): chk(stat.S_IMODE(sp.stat().st_mode) == 0o600, "secrets.env chmod 600", f"chmod 600 {sp}")
     st = load_state(t)
+    if "agent-web" in st["enabled"]:
+        cfg = oc_config()
+        if cfg is None: print("  CANH BAO không đọc được ~/.openclaw/openclaw.json (không kiểm được runtime/sandbox của model)")
+        else:
+            cli = find_cli_runtime(cfg)
+            if cli and not os.environ.get("KIT_ALLOW_CLAUDE_CLI"):
+                chk(False, "model không dùng runner claude-cli", "runner claude-cli chạy NGOÀI sandbox Docker (docs OpenClaw: Claude Code tự quản). Agent khách sẽ chạy lệnh trên máy thật. Đổi sang runtime nhúng: openclaw config set 'agents.defaults.models[\"anthropic/*\"].agentRuntime.id' openclaw (và mục model cụ thể, xem docs/MODEL-AUTH.md). Chỉ cho phép có chủ đích bằng KIT_ALLOW_CLAUDE_CLI=1. Chỗ gặp: " + ", ".join(cli[:3]))
+            else: chk(True, "model không dùng runner claude-cli (agent chạy trong sandbox)" if not cli else "claude-cli được cho phép có chủ đích (KIT_ALLOW_CLAUDE_CLI=1) — agent KHÔNG được sandbox")
+        if shutil.which("docker"):
+            img = sandbox_image_name(cfg or {})
+            if run(["docker", "info"]).returncode == 0:
+                chk(run(["docker", "image", "inspect", img]).returncode == 0, f"image sandbox {img}", "thiếu image: agent sẽ dừng với lỗi 'Sandbox image not found'. Chạy: kit sandbox-image")
+        else: chk(False, "docker (agent-web chạy agent trong sandbox)", "cài Docker Engine theo docs.docker.com/engine/install/ubuntu")
     for n in st["enabled"]:
         m = manifest(n)
         if m.get("min_openclaw") and oc_available():
@@ -471,6 +530,7 @@ def main():
     s = sp.add_parser("apply"); s.add_argument("module", nargs="?"); s.add_argument("--dry-run", action="store_true"); s.set_defaults(f=cmd_apply)
     s = sp.add_parser("update"); s.add_argument("--with-openclaw", action="store_true"); s.set_defaults(f=cmd_update)
     s = sp.add_parser("doctor"); s.set_defaults(f=cmd_doctor)
+    s = sp.add_parser("sandbox-image"); s.add_argument("--force", action="store_true"); s.set_defaults(f=cmd_sandbox_image)
     s = sp.add_parser("run"); s.add_argument("module"); s.add_argument("command"); s.add_argument("args", nargs=argparse.REMAINDER); s.set_defaults(f=cmd_run)
     s = sp.add_parser("export-config"); s.add_argument("args", nargs=argparse.REMAINDER); s.set_defaults(f=cmd_export)
     a = p.parse_args(); a.f(a)

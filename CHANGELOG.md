@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.4
+- **kit doctor** (khi bật agent-web): báo **LỖI** nếu bất kỳ model nào gán `agentRuntime.id = claude-cli`. Runner này chạy NGOÀI sandbox Docker (docs OpenClaw), nên agent khách sẽ chạy lệnh trên máy thật; thử thật trên VM114 báo `sandbox: {mode: off}` (docs/TESTING.md). Cho phép có chủ đích bằng `KIT_ALLOW_CLAUDE_CLI=1`.
+- **kit doctor** kiểm có image sandbox (mặc định `openclaw-sandbox:trixie-slim`; đổi bằng `agents.defaults.sandbox.docker.image` hoặc `KIT_SANDBOX_IMAGE`); thiếu thì LỖI + gợi ý.
+- **kit sandbox-image [--force]**: dựng image sandbox (debian + bash curl git jq python3 ripgrep, user `sandbox`); OpenClaw không tự dựng, docs còn ghi bookworm-slim nhưng bản 2026.11.7 đòi trixie-slim. Idempotent.
+- **docs/MODEL-AUTH.md**: cách cấp quyền model bằng token ủy quyền (`claude setup-token`, mỗi công ty một token riêng) cho runtime nhúng, không dùng API key; lệnh nhập token cần tắt Gateway.
+- test: tests/test_local.py (docker giả) cho cả ba điểm trên.
+
 ## 0.3.3
 - **install.sh**: mỗi máy/công ty tự sinh khoá deploy riêng (`~/.ssh/agent_hub_deploy`, ed25519, không mật khẩu, chmod 600) khi chưa clone được; in khoá công khai để quản trị viên thêm vào GitHub (Deploy keys, CHỈ ĐỌC). Khoá riêng không rời máy. Sau khi clone, ghi `core.sshCommand` vào repo để `kit update` (git pull) dùng đúng khoá. Đổi đường dẫn khoá bằng `KIT_DEPLOY_KEY`.
 
