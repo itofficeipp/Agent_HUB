@@ -36,6 +36,12 @@ def current_tenant(arg):
     if len(ts) == 1: return ts[0]
     die("chưa chọn tenant: dùng --tenant NAME hoặc 'kit init NAME'")
 def tdir(t): return tenants_dir() / t
+def set_current(t, force=False):
+    """Đặt tenant mặc định. Chỉ ghi khi chưa có tenant mặc định (hoặc force): tạo/cấu hình tenant thứ hai KHÔNG đổi tenant đang dùng."""
+    f = CFG / "current"
+    if force or not f.exists() or not f.read_text().strip() or not tdir(f.read_text().strip()).exists():
+        CFG.mkdir(parents=True, exist_ok=True); f.write_text(t + "\n"); return True
+    return f.read_text().strip() == t
 def read_json(p, default):
     return json.loads(Path(p).read_text()) if Path(p).exists() else default
 def write_private(p, text):
@@ -294,7 +300,7 @@ def cmd_setup(a):
         else: die("cần tên tenant: kit setup <ten-cong-ty>")
     if not re.fullmatch(r"[a-z0-9][a-z0-9_-]{1,30}", t): die("tên tenant: a-z 0-9 _ - (2-31 ký tự)")
     if not tdir(t).exists(): cmd_init(argparse.Namespace(name=t))
-    else: (CFG / "current").write_text(t + "\n"); print(f"   dùng tenant có sẵn '{t}'")
+    else: set_current(t); print(f"   dùng tenant có sẵn '{t}'")
     st = load_state(t)
     print("\n[3/5] Chọn chức năng")
     names = module_names()
@@ -354,8 +360,13 @@ def cmd_init(a):
     if not re.fullmatch(r"[a-z0-9][a-z0-9_-]{1,30}", t): die("tên tenant: a-z 0-9 _ - (2-31 ký tự)")
     tdir(t).mkdir(parents=True, exist_ok=True); os.chmod(tdir(t), 0o700)
     save_params(t, load_params(t)); save_state(t, load_state(t))
-    (CFG / "current").write_text(t + "\n")
+    is_cur = set_current(t)
+    if not is_cur: print(f"(tenant mặc định vẫn là '{(CFG / 'current').read_text().strip()}'; muốn chuyển sang '{t}': kit use {t}; hoặc thêm --tenant {t} vào lệnh)")
     print(f"Đã tạo tenant '{t}' tại {tdir(t)}\nBước tiếp: kit setup {t}   (hỏi từng bước có gợi ý), hoặc thủ công: kit enable base, kit enable agent-web")
+
+def cmd_use(a):
+    if not tdir(a.name).exists(): die(f"chưa có tenant '{a.name}' (có: {', '.join(sorted(p.name for p in tenants_dir().glob('*'))) or 'không'})")
+    set_current(a.name, force=True); print(f"Tenant mặc định: {a.name}")
 
 def cmd_modules(a):
     t = a.tenant or ((CFG / "current").read_text().strip() if (CFG / "current").exists() else None)
@@ -454,6 +465,7 @@ def main():
     s = sp.add_parser("setup"); s.add_argument("name", nargs="?"); s.add_argument("--modules", help="vd base,agent-web (mặc định: hỏi)"); s.add_argument("--set", action="append"); s.add_argument("--params-file"); s.add_argument("--yes", action="store_true", help="không hỏi: dùng --set/--params-file/mặc định"); s.add_argument("--no-apply", action="store_true", help="chỉ lưu + xem trước, không dựng"); s.set_defaults(f=cmd_setup)
     s = sp.add_parser("preflight"); s.set_defaults(f=cmd_preflight)
     s = sp.add_parser("init"); s.add_argument("name"); s.set_defaults(f=cmd_init)
+    s = sp.add_parser("use"); s.add_argument("name"); s.set_defaults(f=cmd_use)
     s = sp.add_parser("modules"); s.set_defaults(f=cmd_modules)
     s = sp.add_parser("enable"); s.add_argument("module"); s.add_argument("--set", action="append"); s.add_argument("--params-file", help="JSON tham số KHÔNG bí mật (xem examples/)"); s.add_argument("--yes", action="store_true"); s.set_defaults(f=cmd_enable)
     s = sp.add_parser("apply"); s.add_argument("module", nargs="?"); s.add_argument("--dry-run", action="store_true"); s.set_defaults(f=cmd_apply)

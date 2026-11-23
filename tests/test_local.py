@@ -280,6 +280,15 @@ md = lambda p: oct(os.stat(p).st_mode & 0o777)
 ok(r.returncode == 0 and not (os.stat(nh + "/.config").st_mode & 0o022) and md(nh + "/.config/openclaw-kit/tenants/cty-um") == "0o700", "umask 002: kit init khong tao ~/.config nhom-ghi-duoc; tenant 0700", md(nh + "/.config"))
 os.chmod(nh + "/.config", 0o775); r = sh(KIT + ["preflight"], env=dict(ENV, KIT_HOME=nh + "/.config/openclaw-kit", KIT_USER_HOME=nh)); ok(r.returncode == 1 and "chmod go-w" in r.stdout, "preflight: ~/.config nhom-ghi-duoc -> LOI + goi y chmod go-w", r.stdout[-300:])
 r = sh(KIT + ["--tenant", "cty-pty", "doctor"], env=dict(ENV, FAKE_OC_WARN="1")); ok("CANH BAO openclaw: plugins.entries.duckduckgo" in r.stdout and "openclaw config validate" in r.stdout and "LOI  openclaw config validate" not in r.stdout, "doctor: in canh bao cua openclaw config validate (khong tinh la loi)", r.stdout[-500:])
+# tenant mac dinh: tao/cau hinh tenant thu hai KHONG doi tenant dang dung; kit use moi doi
+th = T + "/h2"; os.makedirs(th); E3 = dict(ENV, KIT_HOME=th + "/cfg", KIT_USER_HOME=th)
+cur = lambda: open(th + "/cfg/current").read().strip()
+sh(KIT + ["init", "ten-a"], env=E3); ok(cur() == "ten-a", "tenant dau tien thanh mac dinh")
+r = sh(KIT + ["init", "ten-b"], env=E3); ok(cur() == "ten-a" and "kit use ten-b" in r.stdout, "kit init tenant thu hai: KHONG doi mac dinh + huong dan kit use", r.stdout)
+sh(KIT + ["setup", "ten-c", "--yes", "--modules", "base", "--no-apply", "--set", "COMPANY_NAME=C", "--set", "OWNER_NAME=C"], env=E3); ok(cur() == "ten-a", "kit setup tenant moi (--no-apply): KHONG doi mac dinh", cur())
+r = sh(KIT + ["use", "ten-b"], env=E3); ok(r.returncode == 0 and cur() == "ten-b", "kit use ten-b: doi mac dinh", r.stdout + r.stderr)
+r = sh(KIT + ["use", "khong-co"], env=E3); ok(r.returncode != 0 and "ten-a" in r.stderr and cur() == "ten-b", "kit use tenant khong ton tai: tu choi, liet ke tenant co", r.stderr)
+
 # moi module.json: moi tham so co hint
 for mn in ("base", "agent-web", "n8n"):
     miss = [s["key"] for s in json.load(open(ROOT + "/modules/" + mn + "/module.json"))["params"] if not s.get("hint")]

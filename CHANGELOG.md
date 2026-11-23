@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.2
+- **Sửa**: `kit init`/`kit setup` tenant thứ hai không còn tự đổi tenant mặc định (phát hiện khi thử trên VM Lab trắng: `kit doctor` trơn kiểm nhầm tenant mới). Tenant đầu tiên vẫn thành mặc định; muốn đổi: `kit use <tenant>` hoặc `--tenant`.
+- Thêm lệnh `kit use <tenant>`; test trong tests/test_local.py.
+
 ## 0.3.1
 - **kit setup**: cài từng bước có gợi ý (kiểm tra máy -> chọn chức năng -> hỏi thông số -> tóm tắt -> apply --dry-run -> apply -> keygen/bên gọi -> doctor -> bước tiếp). Chạy lại an toàn; hỗ trợ --yes/--modules/--params-file/--no-apply cho nhiều công ty.
 - **kit preflight**: kiểm tra máy (không root, python, git, openclaw, node, systemd, linger, docker, dung lượng) với gợi ý sửa.

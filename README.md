@@ -61,7 +61,8 @@ Chi tiết: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Thêm công ty mới: 
 
 | Lệnh | Việc |
 |---|---|
-| `kit init <tenant>` | tạo tenant (mỗi công ty một tenant, có thể nhiều tenant trên một máy) |
+| `kit init <tenant>` | tạo tenant (mỗi công ty một tenant, có thể nhiều tenant trên một máy); tenant đầu tiên thành mặc định, các tenant sau không đổi mặc định |
+| `kit use <tenant>` | đổi tenant mặc định (hoặc thêm `--tenant <tenant>` vào từng lệnh) |
 | `kit modules` | chức năng, bật/tắt, có bản mới không |
 | `kit enable <module> [--set K=V] [--params-file f.json] [--yes]` | hỏi/nhận tham số, lưu |
 | `kit apply [module] [--dry-run]` | dựng file, systemd, `openclaw config patch` (idempotent) |
