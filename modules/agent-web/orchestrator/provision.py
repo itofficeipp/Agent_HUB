@@ -4,6 +4,7 @@ Chạy trên máy orchestrator (có truy cập n8n API); Gateway thao tác qua a
 Dùng: provision.py [--chi user_id]   In dòng 'OK ...' / 'LOI ...' / 'BO_QUA ...'; exit 1 nếu có LỖI."""
 import argparse, base64, datetime, json, os, sys
 import awconf as A
+import auth_owner as AO
 
 GW_ID = A.C.get("AW_GATEWAY_ID", "gw1"); GDIR = A.C.get("AW_GATEWAY_DIR", "~/openclaw-kit-agentweb")
 TB, TK = A.table("registry"), A.table("kenh")
@@ -17,6 +18,9 @@ def tao_agent(only):
     rs = A.rows(TB, "trang_thai", "cho_tao")
     if only: rs = [r for r in rs if r["user_id"] == only]
     print("cho_tao:", len(rs)); loi = 0
+    if rs:
+        try: AO.ensure()   # agent mới cần thừa hưởng credential; lỗi chỉ cảnh báo, không chặn tạo agent
+        except Exception as e: print("CANH BAO auth-owner:", str(e)[:200])
     for r in rs:
         p = {k: r.get(k) for k in ("agent_id", "user_id", "ho_ten", "email", "phong_ban")}
         b = base64.b64encode(json.dumps(p, ensure_ascii=False).encode()).decode()

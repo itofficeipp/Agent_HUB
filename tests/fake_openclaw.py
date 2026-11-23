@@ -20,9 +20,19 @@ elif a[:2] == ["config", "patch"]:
     p = json.loads(sys.stdin.read())
     if "--dry-run" not in a: c = load(); merge(c, p); save(c)
 elif a[:2] == ["config", "get"]:
-    c = load(); v = c.get(a[2])
+    c = load(); v = c
+    for k in a[2].split("."):
+        v = v.get(k) if isinstance(v, dict) else None
     if v is None: print(json.dumps({"ok": False})); sys.exit(1)
     print(json.dumps(v))
+elif a[:2] == ["config", "unset"]:
+    c = load(); d = c; ks = a[2].split(".")
+    for k in ks[:-1]: d = d.get(k) or {}
+    d.pop(ks[-1], None); save(c)
+elif a[:2] == ["models", "status"]:
+    # agent có credential nếu nằm trong cfg["fake_auth"] (list); thừa hưởng được mô phỏng ở phía kit, không ở đây
+    ag = a[a.index("--agent") + 1] if "--agent" in a else "main"
+    sys.exit(0 if ag in (load().get("fake_auth") or []) else 1)
 elif a[:2] == ["config", "validate"]: print("ok" + ("\n2 warning(s):\n  ! plugins.entries.duckduckgo: plugin not installed: duckduckgo" if os.environ.get("FAKE_OC_WARN") else ""))
 elif a[:2] == ["agents", "list"]: print(json.dumps([{"id": k} for k in (load().get("agents") or {}).get("entries", {})]))
 elif a[:2] == ["agents", "add"]:

@@ -489,6 +489,16 @@ def cmd_doctor(a):
             if cli and not os.environ.get("KIT_ALLOW_CLAUDE_CLI"):
                 chk(False, "model không dùng runner claude-cli", "runner claude-cli chạy NGOÀI sandbox Docker (docs OpenClaw: Claude Code tự quản). Agent khách sẽ chạy lệnh trên máy thật. Đổi sang runtime nhúng: openclaw config set 'agents.defaults.models[\"anthropic/*\"].agentRuntime.id' openclaw (và mục model cụ thể, xem docs/MODEL-AUTH.md). Chỉ cho phép có chủ đích bằng KIT_ALLOW_CLAUDE_CLI=1. Chỗ gặp: " + ", ".join(cli[:3]))
             else: chk(True, "model không dùng runner claude-cli (agent chạy trong sandbox)" if not cli else "claude-cli được cho phép có chủ đích (KIT_ALLOW_CLAUDE_CLI=1) — agent KHÔNG được sandbox")
+        ctx = context(t)
+        if ctx.get("AW_GATEWAY_SSH", "local") != "local": print("  CANH BAO Gateway ở máy khác: kit không kiểm được credential model. Trên Gateway chạy: openclaw models status --agent main --check")
+        elif oc_available():
+            try: eff = (((cfg or {}).get("agents") or {}).get("defaults") or {}).get("authInheritance", {}).get("agentId") or "main"
+            except Exception: eff = "main"
+            want = (ctx.get("AW_AUTH_OWNER") or "main").strip()
+            r = run([OC, "models", "status", "--agent", eff, "--check"], timeout=90)
+            if r.returncode == 2: print(f"  CANH BAO token model của agent '{eff}' sắp hết hạn: dán token mới (docs/MODEL-AUTH.md)")
+            else: chk(r.returncode == 0, f"credential model có ở agent '{eff}' (agent nhân viên mới thừa hưởng)", f"agent '{eff}' CHƯA có token model nên agent mới báo 'No API key found'. Dán: openclaw models auth paste-token --provider anthropic --agent {eff} --expires-in 365d (docs/MODEL-AUTH.md). Token ở agent khác: kit enable agent-web --set AW_AUTH_OWNER=<id agent> rồi kit apply agent-web")
+            if want not in ("", "none") and want != eff: print(f"  CANH BAO AW_AUTH_OWNER={want} nhưng Gateway thừa hưởng từ '{eff}'. Chạy: kit run agent-web auth-owner")
         if shutil.which("docker"):
             img = sandbox_image_name(cfg or {})
             if run(["docker", "info"]).returncode == 0:

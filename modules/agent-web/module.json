@@ -170,6 +170,14 @@
       "example": "/srv/agents"
     },
     {
+      "key": "AW_AUTH_OWNER",
+      "prompt": "Agent giữ token model để mọi agent nhân viên dùng chung (main | id agent | none)",
+      "default": "main",
+      "pattern": "[A-Za-z0-9_-]{1,64}",
+      "hint": "Agent nhân viên tạo qua webhook có kho credential TRỐNG. 'main' (mặc định): dán token vào main (openclaw models auth paste-token --provider anthropic --agent main). Nếu token nằm ở agent khác thì nhập id agent đó, kit đặt agents.defaults.authInheritance. 'none' = tự quản.",
+      "example": "main"
+    },
+    {
       "key": "AW_MCP_PROFILE",
       "prompt": "Hồ sơ MCP (example | none | tên file trong profiles/)",
       "default": "none",
@@ -499,6 +507,12 @@
           "port"
         ]
       }
+    },
+    {
+      "src": "orchestrator/auth_owner.py",
+      "dest": "{{TENANT_DIR}}/agent-web/orchestrator/auth_owner.py",
+      "render": false,
+      "mode": "0755"
     }
   ],
   "post_apply": [
@@ -563,6 +577,12 @@
       "argv": [
         "python3",
         "{{TENANT_DIR}}/agent-web/orchestrator/open_tools.py"
+      ]
+    },
+    "auth-owner": {
+      "argv": [
+        "python3",
+        "{{TENANT_DIR}}/agent-web/orchestrator/auth_owner.py"
       ]
     }
   },

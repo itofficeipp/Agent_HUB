@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.6
+- **Sửa lỗi lượt chat đầu của agent mới**: agent nhân viên tạo qua webhook có kho credential TRỐNG nên báo `No API key found for provider "anthropic"` (phát hiện khi thử thật trên VM114). Thêm tham số **AW_AUTH_OWNER** (mặc định `main`; `none` = tự quản; hoặc id agent đang giữ token): kit đặt `agents.defaults.authInheritance` để mọi agent mới dùng chung credential của agent chủ.
+  - Tự đặt khi `kit apply agent-web` (post_apply) và trước khi `provision` tạo agent mới; chạy tay: `kit run agent-web auth-owner`. Chỉ ghi khi chưa đặt; Gateway đã đặt giá trị khác thì giữ nguyên và chỉ cảnh báo; agent chủ chưa tồn tại thì báo LỖI, không ghi. Chạy lại an toàn (idempotent). `main`/`none` không đổi gì.
+  - **kit doctor** (agent-web, Gateway ở máy này): kiểm `openclaw models status --agent <chủ> --check`, báo **LỖI** nếu agent chủ chưa có token (kèm lệnh `paste-token` và cách đổi chủ), cảnh báo nếu token sắp hết hạn hoặc AW_AUTH_OWNER lệch với Gateway. Gateway ở máy khác: chỉ in cảnh báo cách tự kiểm.
+  - test: fake openclaw hỗ trợ `config get` theo đường dẫn, `config unset`, `models status`; thêm 20 ca (auth-owner, doctor, provision tự đặt, chống chèn lệnh).
+
 ## 0.3.5
 - **kit doctor --strict**: thoát mã 1 khi có mục LỖI (để CI/script/tự động hoá dùng được). Không có `--strict` vẫn thoát mã 0 như cũ (đã rà: setup/update gọi doctor nội bộ, không dựa vào mã thoát; test cũ không đọc mã thoát của doctor). `kit setup` và `kit update` không đổi.
 

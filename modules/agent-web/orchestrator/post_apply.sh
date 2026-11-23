@@ -6,6 +6,8 @@ export KIT_HOME KIT_TENANT
 AUTOSTART="${1:-no}"; BACKEND="${2:-local}"; STATS="${3:-no}"
 U=openclaw-kit-agentweb
 python3 "$here/deploy_gateway.py"
+# agent mới cần dùng chung credential (authInheritance); lỗi ở đây không chặn apply, chỉ báo
+python3 "$here/auth_owner.py" || echo "CANH BAO: chưa đặt được authInheritance (xem dòng LOI ở trên; kit doctor sẽ báo tiếp)"
 if [ -z "${KIT_NO_SYSTEMD:-}" ] && command -v systemctl >/dev/null && [ -d /run/systemd/system ]; then
   systemctl --user daemon-reload
   if [ "$AUTOSTART" = "yes" ]; then

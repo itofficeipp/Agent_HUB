@@ -116,8 +116,12 @@ try:
     ok(call(B, ts=T0 - 3)[0] == 200, "IP khac khong bi anh huong")
 
     # ---- 4. provision.py (backend local) tạo agent thật qua create_agent.sh ----
+    # 0.3.6: AW_AUTH_OWNER=u_boss -> provision tự đặt agents.defaults.authInheritance trước khi tạo agent mới
+    _c = json.load(open(ENV["FAKE_OC_CFG"])); _c.setdefault("agents", {}).setdefault("entries", {})["u_boss"] = {"workspace": H + "/boss"}; json.dump(_c, open(ENV["FAKE_OC_CFG"], "w"))
+    ok(sh(KIT + ["--tenant", "t2", "enable", "agent-web", "--yes", "--set", "AW_AUTH_OWNER=u_boss"]).returncode == 0, "enable --set AW_AUTH_OWNER=u_boss")
     r = sh([sys.executable, A + "/orchestrator/provision.py", "--chi", "NV-A"], env=ENV2); print(r.stdout, r.stderr[-300:])
     ok(r.returncode == 0 and "OK NV-A" in r.stdout, "provision.py --chi NV-A: OK", r.stdout + r.stderr)
+    ok("OK auth-owner: đã đặt agents.defaults.authInheritance.agentId='u_boss'" in r.stdout and json.load(open(ENV["FAKE_OC_CFG"]))["agents"]["defaults"]["authInheritance"] == {"agentId": "u_boss"}, "0.3.6 provision: tu dat authInheritance=u_boss truoc khi tao agent moi", r.stdout[-500:])
     db2 = sqlite3.connect(A + "/data/agent-web.db"); db2.row_factory = sqlite3.Row
     ra = dict(db2.execute("select * from agent_registry where user_id='NV-A'").fetchone())
     ok(ra["trang_thai"] == "da_tao" and ra["gateway_id"] == "gw1", "registry NV-A -> da_tao", ra)
@@ -312,6 +316,36 @@ r = sh(KIT + ["--tenant", "t2", "doctor"]); ok("OK   image sandbox openclaw-sand
 r = sh(KIT + ["--tenant", "t2", "doctor", "--strict"]); ok(("mục lỗi" not in r.stdout) == (r.returncode == 0), "doctor --strict: rc=0 khi khong co LOI, rc=1 khi co", (r.returncode, r.stdout[-300:]))
 r = sh(KIT + ["sandbox-image", "--force"], env=dict(ENV, KIT_SANDBOX_IMAGE="openclaw-sandbox:bookworm-slim")); ok("FROM debian:bookworm-slim" in open(T + "/docker.build.in").read(), "KIT_SANDBOX_IMAGE doi tag -> base debian tuong ung", r.stdout + r.stderr)
 json.dump(cfg0, open(CFGP, "w"))
+
+# ---- 0.3.6: auth-owner (agent mới thừa hưởng credential) + doctor kiểm credential ----
+def setcfg(fn):
+    c = json.load(open(CFGP)); fn(c); json.dump(c, open(CFGP, "w"))
+def owner(v): return sh(KIT + ["--tenant", "t2", "enable", "agent-web", "--yes", "--set", "AW_AUTH_OWNER=" + v])
+def run_ao(): return sh(KIT + ["--tenant", "t2", "run", "agent-web", "auth-owner"])
+def dr(): return sh(KIT + ["--tenant", "t2", "doctor"]).stdout
+setcfg(lambda c: (c["agents"].get("defaults", {}).pop("authInheritance", None), c.pop("fake_auth", None)))
+ok(owner("main").returncode == 0, "AW_AUTH_OWNER=main")
+r = run_ao(); ok(r.returncode == 0 and "bỏ qua" in r.stdout and "authInheritance" not in json.dumps(json.load(open(CFGP))["agents"].get("defaults", {})), "auth-owner=main: khong doi gi", r.stdout)
+o = dr(); ok("LOI  credential model có ở agent 'main'" in o and "paste-token --provider anthropic --agent main" in o, "doctor: main chua co token -> LOI + lenh paste-token", o[-500:])
+setcfg(lambda c: c.update(fake_auth=["main"])); o = dr(); ok("OK   credential model có ở agent 'main'" in o, "doctor: main co token -> OK", o[-400:])
+setcfg(lambda c: c.pop("fake_auth"))
+ok(owner("u_chu").returncode == 0, "AW_AUTH_OWNER=u_chu")
+r = run_ao(); ok(r.returncode == 1 and "LOI auth-owner" in r.stdout and "'u_chu' chưa có" in r.stdout, "auth-owner: agent chu chua ton tai -> LOI, khong ghi gi", r.stdout)
+ok("authInheritance" not in json.dumps(json.load(open(CFGP))["agents"].get("defaults", {})), "khong ghi authInheritance khi agent chu khong ton tai")
+setcfg(lambda c: c["agents"]["entries"].__setitem__("u_chu", {"workspace": H + "/chu"}))
+r = run_ao(); ok(r.returncode == 0 and "đã đặt" in r.stdout and json.load(open(CFGP))["agents"]["defaults"]["authInheritance"] == {"agentId": "u_chu"}, "auth-owner: dat authInheritance=u_chu", r.stdout)
+r = run_ao(); ok(r.returncode == 0 and "đã thừa hưởng" in r.stdout and "đã đặt" not in r.stdout, "auth-owner lan 2: idempotent", r.stdout)
+o = dr(); ok("LOI  credential model có ở agent 'u_chu'" in o, "doctor: theo authInheritance, kiem agent chu (khong phai main)", o[-500:])
+setcfg(lambda c: c.update(fake_auth=["u_chu"])); o = dr(); ok("OK   credential model có ở agent 'u_chu'" in o and "LOI  credential" not in o, "doctor: agent chu co token -> OK", o[-400:])
+ok(owner("main").returncode == 0, "AW_AUTH_OWNER=main (lech Gateway)"); o = dr(); r = run_ao()
+ok("CANH BAO AW_AUTH_OWNER=main nhưng Gateway thừa hưởng từ 'u_chu'" in o and r.returncode == 0 and "bỏ qua" in r.stdout, "doctor: AW_AUTH_OWNER=main nhung Gateway dung u_chu -> canh bao; auth-owner bo qua", (o[-400:], r.stdout))
+ok(owner("u_khac").returncode == 0, "AW_AUTH_OWNER=u_khac"); r = run_ao(); o = dr()
+ok(r.returncode == 0 and "CANH BAO auth-owner" in r.stdout and json.load(open(CFGP))["agents"]["defaults"]["authInheritance"] == {"agentId": "u_chu"}, "auth-owner: Gateway da dat gia tri khac -> giu nguyen, chi canh bao", r.stdout)
+ok("CANH BAO AW_AUTH_OWNER=u_khac nhưng Gateway thừa hưởng từ 'u_chu'" in o and "kit run agent-web auth-owner" in o, "doctor: canh bao lech AW_AUTH_OWNER", o[-500:])
+ok(owner("none").returncode == 0 and "bỏ qua" in run_ao().stdout, "AW_AUTH_OWNER=none: bo qua")
+ok(owner("a b; rm -rf x").returncode != 0, "AW_AUTH_OWNER khong hop le bi tu choi (chong chen lenh)")
+ok(owner("main").returncode == 0, "tra AW_AUTH_OWNER=main")
+setcfg(lambda c: (c["agents"]["defaults"].pop("authInheritance", None), c.pop("fake_auth", None)))
 
 # moi module.json: moi tham so co hint
 for mn in ("base", "agent-web", "n8n"):

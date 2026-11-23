@@ -29,6 +29,7 @@ Thu hồi token: claude.ai/settings/claude-code.
 - Mỗi lượt tốn khoảng 16k token (phần nền cố định ~8k: prompt hệ thống + schema công cụ). Xem số đo trong docs/TESTING.md khi chọn gói.
 
 ## Agent tạo qua webhook cần dùng chung credential (ĐÃ THỬ THẬT trên VM114, 24/11)
+Từ kit 0.3.6 việc này TỰ ĐỘNG: tham số `AW_AUTH_OWNER` (mặc định `main`) + `kit apply agent-web` hoặc `provision` tự đặt `authInheritance`; `kit doctor` báo LỖI nếu agent chủ chưa có token. Chỉ cần: (1) dán token vào agent chủ, (2) nếu chủ không phải `main`: `kit enable agent-web --set AW_AUTH_OWNER=<id agent>` rồi `kit apply agent-web` (hoặc `kit run agent-web auth-owner`). Phần dưới là cách làm tay / giải thích.
 Mỗi agent nhân viên do kit tạo (webhook -> provision) có kho credential riêng, ban đầu TRỐNG: lượt đầu lỗi `No API key found for provider "anthropic"`.
 Chọn MỘT agent làm "chủ credential" (nơi đã `paste-token`, thường là `main`) rồi cho mọi agent khác thừa hưởng:
 ```
