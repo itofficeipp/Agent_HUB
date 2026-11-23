@@ -5,6 +5,9 @@
 - **kit preflight**: kiểm tra máy (không root, python, git, openclaw, node, systemd, linger, docker, dung lượng) với gợi ý sửa.
 - Mọi tham số của base/agent-web/n8n có **hint** (gợi ý) và **example** (ví dụ); nhập sai thì báo lỗi và hỏi lại (tối đa 5 lần) thay vì thoát.
 - install.sh/README: trỏ đúng repo itofficeipp/Agent_HUB, bỏ chỗ giữ chỗ.
+- sửa lỗi thật (thử trên Lab): umask 002 làm ~/.config nhóm-ghi được nên OpenClaw không cài được service; kit đặt umask 022, preflight kiểm quyền thư mục.
+- doctor in cảnh báo của openclaw config validate (vd plugin duckduckgo ở 2026.11); docs/UPDATING.md có bảng lưu ý theo phiên bản.
+- thử thật với OpenClaw 2026.11.7 trên user mới (docs/TESTING.md).
 - test: tests/test_local.py mục 11 (setup tương tác qua pty + không tương tác, preflight, hint đủ).
 
 ## 0.3.0

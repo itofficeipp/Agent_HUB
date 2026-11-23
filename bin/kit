@@ -339,12 +339,12 @@ def cmd_setup(a):
             cn = input("   tên bên gọi (vd hrm) [web]: ").strip() or "web"
             kit_cmd(t, "run", "agent-web", "add-caller", cn)
     print("\n== Kiểm tra (kit doctor)")
-    cmd_doctor(argparse.Namespace(tenant=t))
+    nbad = cmd_doctor(argparse.Namespace(tenant=t))
     print(f"""
 == BƯỚC TIẾP
-  1. Mục LOI ở doctor về 'bên gọi'/'địa chỉ công khai' là bình thường nếu chưa tạo bên gọi hoặc chưa cấu hình tunnel/Caddy:
-       kit run agent-web add-caller <ten>        tạo bên gọi (in mật khẩu 1 lần)
-       xem hướng dẫn ra Internet: {tdir(t)}/agent-web/expose/HUONG_DAN.md
+  1. {"Doctor còn mục LOI: thường là chưa tạo bên gọi hoặc chưa cấu hình tunnel/Caddy (đọc dòng '->' để biết cách sửa)." if nbad else "Doctor: tất cả OK."}
+       kit run agent-web add-caller <ten>        thêm bên gọi (in mật khẩu 1 lần)
+       hướng dẫn đưa ra Internet: {tdir(t)}/agent-web/expose/HUONG_DAN.md
   2. Bật dịch vụ nền khi sẵn sàng (nếu AW_AUTOSTART=no): xem dòng GỢI Ý ở phần dựng phía trên.
   3. Thử webhook đủ các ca: kit run agent-web test-webhook --user <ten> --password <mk> --secret <hmac_key>
   4. Cập nhật kit về sau: kit update""")
