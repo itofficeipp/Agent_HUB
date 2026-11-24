@@ -1,7 +1,7 @@
 """Gửi tin báo lỗi qua bot Telegram TRỰC TIẾP bằng Bot API (không qua OpenClaw Gateway), chỉ stdlib.
 
-Vì sao trực tiếp: cảnh báo phải tới được ngay cả khi Gateway/OpenClaw đang hỏng. Bot này CHỈ GỬI tin, không nhận tin,
-không gắn vào agent nào, nên không thể bị người lạ nhắn vào để điều khiển agent.
+Vì sao trực tiếp: cảnh báo phải tới được ngay cả khi Gateway/OpenClaw đang hỏng. Phần GỬI của kit không nhận tin. Từ 0.3.13 kit còn dùng cùng token làm bot chat của agent tổng
+(channels.telegram, chỉ ID người nhận được nhắn - allowlist), nhưng việc nhận tin do Gateway lo, không phải file này.
 Token không bao giờ được in ra hay đưa vào thông báo lỗi. AW_TG_API đổi địa chỉ API (dùng cho thử nghiệm).
 """
 import json, os, re, urllib.error, urllib.request

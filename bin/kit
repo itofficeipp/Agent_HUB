@@ -9,8 +9,9 @@
   kit apply [module] [--dry-run] dựng cấu hình/dịch vụ từ mẫu (idempotent)
   kit update [--with-openclaw]   git pull kit + (tuỳ chọn) update OpenClaw + migrations + apply + doctor
   kit doctor [--strict]          kiểm tra môi trường và từng module (gồm sandbox/runtime model); --strict: thoát mã 1 nếu có LỖI
-  kit alert-bot                  nhập/đổi token bot Telegram báo lỗi + ID người nhận (nhập ẩn), gửi thử 1 tin
+  kit alert-bot                  nhập/đổi token bot Telegram + ID người nhận (nhập ẩn), gửi thử 1 tin, gắn luôn làm bot chat của agent tổng
   kit alert-test                 gửi thử 1 tin báo lỗi bằng cấu hình đang lưu
+  kit alert-bind                 gắn (lại) bot đó làm bot chat của agent tổng (agent mặc định), chỉ ID nhận được nhắn
   kit sandbox-image [--force]    dựng image Docker sandbox cho agent (OpenClaw không tự dựng)
   kit run <module> <lệnh> ...    lệnh riêng của module (vd agent-web add-caller)
   kit export-config              xuất cấu hình máy hiện tại đã che bí mật (để xem/đưa vào mẫu)
@@ -142,6 +143,79 @@ def probe_alert(token, target, interactive=True):
         if r in ("bo", "bỏ", "b", "n", "no"): return False
     return False
 
+def oc_get(path):
+    """Đọc 1 khoá cấu hình OpenClaw (JSON). Không có/lỗi -> None."""
+    if not oc_available(): return None
+    r = subprocess.run([OC, "config", "get", path], capture_output=True, text=True)
+    if r.returncode != 0: return None
+    txt = r.stdout.strip()
+    for cand in (txt, txt[txt.find("{"):] if "{" in txt else "", txt[txt.find("["):] if "[" in txt else ""):
+        try: return json.loads(cand)
+        except Exception: pass
+    return None
+
+def default_agent_id():
+    """ID agent mặc định (agent tổng). Không đọc được thì dùng 'main'."""
+    if oc_available():
+        r = subprocess.run([OC, "agents", "list", "--json"], capture_output=True, text=True)
+        try:
+            d = json.loads(r.stdout[r.stdout.find("["):] if "[" in r.stdout and (r.stdout.find("{") < 0 or r.stdout.find("[") < r.stdout.find("{")) else r.stdout[r.stdout.find("{"):])
+            lst = d if isinstance(d, list) else (d.get("agents") or [])
+            for e in lst:
+                if isinstance(e, dict) and (e.get("isDefault") or e.get("default")) and e.get("id"): return str(e["id"])
+            ids = [str(e["id"]) for e in lst if isinstance(e, dict) and e.get("id")]
+            if "main" in ids or not ids: return "main"
+            return ids[0]
+        except Exception: pass
+    return "main"
+
+def bind_main_bot(t, token, target, name="", interactive=True):
+    """Dùng chính token bot này làm bot chat của AGENT TỔNG (agent mặc định) trên Gateway:
+    channels.telegram.tokenFile (file chmod 600), chỉ ID người nhận được nhắn (allowlist) và là chủ sở hữu
+    (commands.ownerAllowFrom), gắn account telegram:default vào agent mặc định, đặt tên hiển thị = tên trợ lý.
+    Idempotent. Trả True nếu xong, False nếu bỏ qua/lỗi (in lý do)."""
+    if not re.fullmatch(r"[0-9]{5,15}", str(target or "")):
+        print("   (Bỏ qua gắn bot vào agent: ID nhận là ID nhóm/không hợp lệ; chỉ ID người dùng (dãy số dương) mới được làm chủ bot chat.)"); return False
+    if not oc_available():
+        print("   (Bỏ qua gắn bot vào agent: chưa thấy openclaw trong PATH. Sau khi cài OpenClaw chạy: kit alert-bind)"); return False
+    if not os.environ.get("KIT_NO_PROBE"):
+        okt, info = tg().get_me(token)
+        if not okt: print("   (Bỏ qua gắn bot vào agent: Telegram không nhận token này: " + info + ". Sửa token rồi chạy: kit alert-bot)"); return False
+    tf = tdir(t) / "telegram-main.token"
+    cur = oc_get("channels.telegram")
+    cur = cur if isinstance(cur, dict) else {}
+    other = cur.get("tokenFile") and str(cur["tokenFile"]) != str(tf)
+    if cur.get("botToken") or other:
+        same = False
+        if other and not cur.get("botToken"):
+            try: same = Path(cur["tokenFile"]).read_text().strip() == token
+            except Exception: same = False
+        if not same:
+            print("   Kênh Telegram của OpenClaw đang dùng MỘT BOT KHÁC (channels.telegram đã có token).")
+            if not (interactive and yesno("   Thay bằng bot này làm bot chat của agent tổng? (bot cũ sẽ ngừng nhận tin)", False, interactive)):
+                print("   Giữ nguyên bot cũ, KHÔNG gắn. Muốn đổi sau: kit alert-bind"); return False
+    write_private(tf, token)
+    allow = [str(x) for x in (cur.get("allowFrom") or []) if str(x) != str(target)] + [str(target)]
+    owners = oc_get("commands.ownerAllowFrom"); owners = [str(x) for x in owners] if isinstance(owners, list) else []
+    if f"telegram:{target}" not in owners: owners.append(f"telegram:{target}")
+    tgp = {"enabled": True, "tokenFile": str(tf), "allowFrom": allow,
+           "dmPolicy": cur.get("dmPolicy") if cur.get("dmPolicy") in ("allowlist", "disabled") else "allowlist"}
+    if not cur.get("groupPolicy"): tgp["groupPolicy"] = "disabled"
+    bk = backup_openclaw_config()
+    if bk: print(f"   Đã sao lưu cấu hình OpenClaw: {bk}")
+    if not oc_patch(json.dumps({"channels": {"telegram": tgp}, "commands": {"ownerAllowFrom": owners}}), False):
+        print("   CHƯA ghi được cấu hình Telegram cho agent tổng (xem lỗi ở trên)."); return False
+    aid = default_agent_id()
+    r = run([OC, "agents", "bind", "--agent", aid, "--bind", "telegram:default"])
+    if r.returncode != 0 and "already" not in (r.stdout + r.stderr).lower():
+        print(f"   CẢNH BÁO: chưa gắn được bot vào agent '{aid}': {(r.stderr or r.stdout).strip()[:300]}"); return False
+    if name:
+        r = run([OC, "agents", "set-identity", "--agent", aid, "--name", name])
+        if r.returncode != 0: print(f"   CẢNH BÁO: chưa đặt được tên hiển thị '{name}' cho agent '{aid}': {(r.stderr or r.stdout).strip()[:300]}")
+    print(f"   OK bot này nay là bot chat của agent tổng '{aid}'" + (f" ({name})" if name else "") + f"; chỉ ID {target} được nhắn và là chủ sở hữu.")
+    print("      Cấu hình áp dụng khi Gateway rảnh (không cần restart). Kiểm: timeout 50 openclaw channels status --probe --json")
+    return True
+
 def collect_params(t, mods, sets, interactive):
     params, sec = load_params(t), load_secrets(t)
     getv = lambda k: sets.get(k, params.get(k, sec.get(k)))
@@ -173,6 +247,7 @@ def collect_params(t, mods, sets, interactive):
             (sec if is_sec else params)[k] = val
             if val and spec.get("probe") == "healthz" and interactive and not os.environ.get("KIT_NO_PROBE"): probe_healthz(val)
             if k == "AW_ALERT_BOT_TOKEN" and val and interactive and not os.environ.get("KIT_NO_PROBE"): probe_alert(val, getv("AW_ALERT_TARGET"), True)
+            if k == "AW_ALERT_BOT_TOKEN" and val and interactive and not os.environ.get("KIT_NO_BIND") and yesno("\n   Dùng luôn bot này làm bot CHAT của agent tổng (agent mặc định); chỉ ID nhận ở trên được nhắn và là chủ sở hữu?", True, interactive): bind_main_bot(t, val, getv("AW_ALERT_TARGET"), getv("ASSISTANT_NAME") or "", True)
     save_params(t, params); save_secrets(t, sec)
     return params, sec
 
@@ -393,7 +468,7 @@ def cmd_alert_bot(a):
     if not tdir(t).exists(): die(f"chưa có tenant '{t}' (kit setup {t})")
     if not sys.stdin.isatty(): die("kit alert-bot cần chạy trong terminal (token nhập ẩn, không nhận qua tham số dòng lệnh)")
     params, sec = load_params(t), load_secrets(t)
-    print(f"== Bot báo lỗi của tenant '{t}'\n   Bot chỉ GỬI tin báo lỗi tới một ID Telegram; không nhận lệnh, không gắn vào agent nào.")
+    print(f"== Bot báo lỗi của tenant '{t}'\n   Bot gửi tin báo lỗi tới một ID Telegram (gọi thẳng Bot API, không qua Gateway).\n   Mặc định kit còn dùng luôn token này làm bot CHAT của agent tổng; chỉ ID nhận được nhắn và là chủ sở hữu. Không muốn: kit alert-bot --no-chat")
     print("   1) Tạo bot: nhắn @BotFather, gõ /newbot, nhận token.  2) Mở bot đó trong Telegram, bấm Start.  3) ID của bạn: nhắn @userinfobot.")
     cur = params.get("AW_ALERT_TARGET", "")
     for _ in range(5):
@@ -412,7 +487,16 @@ def cmd_alert_bot(a):
     print("   Đã lưu (token trong secrets.env, chmod 600). Gửi thử:")
     ok = probe_alert(v2, v, interactive=True)
     print("   Kết quả: " + ("ĐÃ GỬI được tin thử." if ok else "CHƯA gửi được tin thử. Đã lưu cấu hình; sửa theo gợi ý ở trên rồi chạy: kit alert-test"))
+    if not getattr(a, "no_chat", False):
+        print("\n   Gắn bot vào agent tổng:"); bind_main_bot(t, v2, v, params.get("ASSISTANT_NAME", ""), True)
     sys.exit(0 if ok else 1)
+
+def cmd_alert_bind(a):
+    """Gắn (lại) bot báo lỗi đang lưu làm bot chat của agent tổng. Không hỏi token."""
+    t = current_tenant(a.tenant); tgt, tok = _alert_cfg(t)
+    if not tgt or not tok: die("chưa có ID/token bot báo lỗi. Chạy: kit alert-bot")
+    params = load_params(t)
+    sys.exit(0 if bind_main_bot(t, tok, tgt, params.get("ASSISTANT_NAME", ""), sys.stdin.isatty()) else 1)
 
 def cmd_alert_test(a):
     t = current_tenant(a.tenant); tgt, tok = _alert_cfg(t)
@@ -566,7 +650,12 @@ def cmd_doctor(a):
         a_tgt, a_tok = _alert_cfg(t)
         if not a_tgt: print("  CANH BAO báo lỗi: chưa đặt ID nhận (AW_ALERT_TARGET) nên khi tạo agent lỗi chỉ ghi file log, KHÔNG có tin nhắn. Chạy: kit alert-bot")
         elif not a_tok: print("  CANH BAO báo lỗi: có ID nhận nhưng chưa có token bot gửi tin; sẽ dùng kênh Telegram của OpenClaw (nếu chưa cấu hình thì không gửi được). Chạy: kit alert-bot")
-        else: print("  OK   báo lỗi Telegram đã cấu hình (bot + ID nhận). Thử gửi: kit alert-test")
+        else:
+            print("  OK   báo lỗi Telegram đã cấu hình (bot + ID nhận). Thử gửi: kit alert-test")
+            if oc_available():
+                tgc = oc_get("channels.telegram"); tgc = tgc if isinstance(tgc, dict) else {}
+                if str(tgc.get("tokenFile") or "") == str(tdir(t) / "telegram-main.token") and tgc.get("enabled", True): print("  OK   bot này đang là bot chat của agent tổng (chỉ ID nhận được nhắn)")
+                else: print("  CANH BAO bot báo lỗi chưa gắn làm bot chat của agent tổng. Chạy: kit alert-bind")
         if shutil.which("docker"):
             img = sandbox_image_name(cfg or {})
             if run(["docker", "info"]).returncode == 0:
@@ -610,7 +699,8 @@ def main():
     s = sp.add_parser("apply"); s.add_argument("module", nargs="?"); s.add_argument("--dry-run", action="store_true"); s.set_defaults(f=cmd_apply)
     s = sp.add_parser("update"); s.add_argument("--with-openclaw", action="store_true"); s.set_defaults(f=cmd_update)
     s = sp.add_parser("doctor"); s.add_argument("--strict", action="store_true", help="thoát mã 1 nếu có mục LỖI (mặc định thoát 0)"); s.set_defaults(f=cmd_doctor)
-    s = sp.add_parser("alert-bot"); s.set_defaults(f=cmd_alert_bot)
+    s = sp.add_parser("alert-bot"); s.add_argument("--no-chat", action="store_true", help="chỉ dùng bot để GỬI báo lỗi, không gắn làm bot chat của agent tổng"); s.set_defaults(f=cmd_alert_bot)
+    s = sp.add_parser("alert-bind"); s.set_defaults(f=cmd_alert_bind)
     s = sp.add_parser("alert-test"); s.set_defaults(f=cmd_alert_test)
     s = sp.add_parser("sandbox-image"); s.add_argument("--force", action="store_true"); s.set_defaults(f=cmd_sandbox_image)
     s = sp.add_parser("run"); s.add_argument("module"); s.add_argument("command"); s.add_argument("args", nargs=argparse.REMAINDER); s.set_defaults(f=cmd_run)

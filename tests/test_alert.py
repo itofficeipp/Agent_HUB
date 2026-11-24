@@ -120,6 +120,44 @@ rc, out = drive(KIT + ["--tenant", "td", "enable", "agent-web", "--params-file",
 ok("Token bot Telegram dùng để GỬI" not in out, "enable: bỏ trống ID -> không hỏi token", out[-300:])
 d = sh(KIT + ["--tenant", "td", "enable", "agent-web", "--yes", "--set", "AW_ALERT_TARGET=abc"]); ok(d.returncode != 0 and "AW_ALERT_TARGET" in d.stderr, "ID không phải số bị chặn khi --yes", d.stderr)
 
+# ---- 5b. gắn bot làm bot chat của AGENT TỔNG (cùng token) ----
+OCJ = H + "/.openclaw/openclaw.json"; rj = lambda: json.load(open(OCJ))
+_c = rj()
+for _k in ("channels", "commands", "bindings"): _c.pop(_k, None)   # bỏ phần bot đã gắn ở các mục trước (tenant khác)
+json.dump(dict(_c, agents={"entries": {"main": {}, "nv1": {}}, "default": "main"}), open(OCJ, "w"))
+sh(KIT + ["init", "te"]); sh(KIT + ["--tenant", "te", "enable", "base", "--yes", "--set", "COMPANY_NAME=C", "--set", "OWNER_NAME=O", "--set", "ASSISTANT_NAME=LyLy", "--set", "WORKSPACE_DIR=" + H + "/ws"])
+rc, out = drive(KIT + ["--tenant", "te", "alert-bot"], [(r"ID Telegram người nhận", ["111111"]), (r"Token bot", [TOK])], ENV)
+c = rj(); tg = c.get("channels", {}).get("telegram", {}); tf = T + "/cfg/tenants/te/telegram-main.token"
+ok(rc == 0 and "bot chat của agent tổng 'main' (LyLy)" in out, "alert-bot: gắn bot vào agent tổng + tên LyLy", out[-700:])
+ok(tg.get("tokenFile") == tf and tg.get("enabled") is True and tg.get("dmPolicy") == "allowlist" and tg.get("allowFrom") == ["111111"] and tg.get("groupPolicy") == "disabled", "gắn bot: tokenFile/allowlist/groupPolicy đúng", tg)
+ok(os.path.exists(tf) and oct(os.stat(tf).st_mode & 0o777) == "0o600" and open(tf).read() == TOK, "gắn bot: file token chmod 600, đúng nội dung")
+ok("telegram:111111" in (c.get("commands", {}).get("ownerAllowFrom") or []), "gắn bot: ID nhận là chủ sở hữu (ownerAllowFrom)", c.get("commands"))
+ok({"agentId": "main", "match": {"channel": "telegram", "accountId": "default"}} in (c.get("bindings") or []), "gắn bot: binding telegram:default -> agent mặc định", c.get("bindings"))
+ok(((c.get("agents") or {}).get("entries") or {}).get("main", {}).get("identity", {}).get("name") == "LyLy" and "identity" not in c["agents"]["entries"]["nv1"], "gắn bot: tên LyLy chỉ đặt cho agent tổng")
+ok(TOK not in out and not any(TOK in json.dumps(x) for x in (c,)), "gắn bot: token không hiện trên màn hình, không nằm trong openclaw.json")
+n_before = json.dumps(rj().get("bindings")); rc, out = drive(KIT + ["--tenant", "te", "alert-bind"], [], ENV)
+ok(rc == 0 and json.dumps(rj().get("bindings")) == n_before and rj()["commands"]["ownerAllowFrom"].count("telegram:111111") == 1, "alert-bind chạy lại: không nhân đôi binding/owner", out[-400:])
+# giữ cấu hình sẵn có: owner khác + allowFrom khác không bị mất
+c = rj(); c["commands"]["ownerAllowFrom"] = ["telegram:999"]; c["channels"]["telegram"]["allowFrom"] = ["999"]; json.dump(c, open(OCJ, "w"))
+rc, out = drive(KIT + ["--tenant", "te", "alert-bind"], [], ENV); c = rj()
+ok(set(c["commands"]["ownerAllowFrom"]) == {"telegram:999", "telegram:111111"} and set(c["channels"]["telegram"]["allowFrom"]) == {"999", "111111"}, "alert-bind: gộp, không ghi đè owner/allowFrom đang có", c.get("commands"))
+# bot khác đang dùng -> không ghi đè (không tương tác = giữ nguyên)
+other = T + "/other.token"; open(other, "w").write("555555555:" + "C" * 35)
+c = rj(); c["channels"]["telegram"]["tokenFile"] = other; json.dump(c, open(OCJ, "w"))
+r = sh(KIT + ["--tenant", "te", "alert-bind"], inp="")
+ok(r.returncode == 1 and rj()["channels"]["telegram"]["tokenFile"] == other and "MỘT BOT KHÁC" in r.stdout, "bot khác đang dùng: giữ nguyên, không ghi đè", r.stdout[-400:])
+# token Telegram từ chối (401) -> không gắn bot (không ghi token hỏng vào kênh)
+c = rj(); c.pop("channels", None); c.pop("bindings", None); json.dump(c, open(OCJ, "w")); sh(KIT + ["init", "tg"])
+rc, out = drive(KIT + ["--tenant", "tg", "alert-bot"], [(r"ID Telegram người nhận", ["111111"]), (r"Token bot", [BAD]), (r"Enter = thử lại", ["bo"])], ENV)
+ok("Bỏ qua gắn bot vào agent" in out and "telegram" not in (rj().get("channels") or {}) and not rj().get("bindings"), "token bị từ chối (401): không gắn bot vào agent", out[-500:])
+# --no-chat: chỉ báo lỗi
+json.dump({}, open(OCJ, "w")); sh(KIT + ["init", "tf"])
+rc, out = drive(KIT + ["--tenant", "tf", "alert-bot", "--no-chat"], [(r"ID Telegram người nhận", ["111111"]), (r"Token bot", [TOK])], ENV)
+ok(rc == 0 and not os.path.exists(OCJ) or "telegram" not in (rj().get("channels") or {}), "alert-bot --no-chat: không đụng cấu hình kênh Telegram", out[-300:])
+# ID nhóm (âm): không gắn làm bot chat
+rc, out = drive(KIT + ["--tenant", "tf", "alert-bot"], [(r"ID Telegram người nhận", ["-1001234567890"]), (r"Token bot", [TOK])], ENV)
+ok("Bỏ qua gắn bot vào agent" in out and not (os.path.exists(OCJ) and "telegram" in (rj().get("channels") or {})), "ID nhóm: bỏ qua gắn bot chat", out[-400:])
+
 # ---- 6. doctor ----
 def doc(t): return sh(KIT + ["--tenant", t, "doctor"]).stdout
 ok("báo lỗi Telegram đã cấu hình" in doc("tc"), "doctor: có token + ID -> OK")

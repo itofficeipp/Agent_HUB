@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.13
+- **Token bot Telegram nhập lúc cài đặt nay dùng luôn cho AGENT TỔNG (agent mặc định).** Trước đây bot chỉ gửi báo lỗi; anh Dũng muốn bot đó cũng là bot chat của trợ lý tổng (tên đặt lúc cài, vd LyLy) và ID nhận báo lỗi là ID quản trị tối cao. Trước đó anh phải gõ tay vài nhóm lệnh (config patch, agents bind, set-identity).
+  - `kit alert-bot` và câu hỏi token trong `kit setup`/`kit enable agent-web`: sau khi lưu token, kit tự (1) ghi token vào `tenants/<t>/telegram-main.token` chmod 600 (không vào openclaw.json), (2) `channels.telegram`: tokenFile, `dmPolicy: allowlist`, `allowFrom` gồm ID nhận, `groupPolicy: disabled` (chỉ khi chưa đặt), (3) `commands.ownerAllowFrom` thêm `telegram:<ID>` (chủ sở hữu bot), (4) `openclaw agents bind --agent <agent mặc định> --bind telegram:default`, (5) `openclaw agents set-identity --name <ASSISTANT_NAME>`. Sao lưu openclaw.json trước khi ghi. Chạy lại không nhân đôi.
+  - **Gộp, không ghi đè**: owner/allowFrom đang có được giữ. Nếu `channels.telegram` đang dùng MỘT BOT KHÁC, kit hỏi (mặc định không) hoặc giữ nguyên khi không tương tác.
+  - ID nhận là ID nhóm (âm): chỉ gửi báo lỗi, không gắn bot chat.
+  - Mới: `kit alert-bind` (gắn lại bằng token đang lưu), `kit alert-bot --no-chat` (chỉ gửi báo lỗi), `KIT_NO_BIND=1` (bỏ câu hỏi trong setup). `kit doctor` báo bot đã gắn agent tổng chưa.
+  - Gửi báo lỗi vẫn đi thẳng Bot API, không qua Gateway: Gateway hỏng vẫn báo được.
+  - Test mới trong `tests/test_alert.py` (mục 5b, openclaw GIẢ, Telegram GIẢ). **CHƯA thử qua kit với OpenClaw thật**; các lệnh tương đương anh Dũng đã chạy tay trên Ubuntu 24/11 (config patch + agents bind + set-identity cho kết quả đúng, bot nhận tin nhắn thật).
+  - Lưu ý: chưa chứng minh agent tổng trả lời bằng model thật (token Claude đang rate_limit tới khoảng 00:30 25/11).
+
 ## 0.3.12
 - **Thêm bước nhập token bot Telegram để BÁO LỖI** (trước đây `kit setup` chỉ hỏi ID nhận, không hỏi token nên không có tin nào gửi đi; chỉ ghi `loi_su_kien.log`). Gặp thật khi anh Dũng cài thử trên Ubuntu: màn hình không có chỗ nhập token bot.
   - `kit setup` / `kit enable agent-web`: sau câu **ID Telegram người nhận báo lỗi** (`AW_ALERT_TARGET`, nay phải là dãy số) kit hỏi **token bot** (`AW_ALERT_BOT_TOKEN`, nhập ẩn, lưu `secrets.env` chmod 600, không vào `params.json`). Bỏ trống ID thì không hỏi token. Hỏi xong kit kiểm token bằng `getMe` rồi gửi thử 1 tin; nếu người nhận chưa bấm Start thì nói rõ cách sửa và cho thử lại.

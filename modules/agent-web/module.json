@@ -279,7 +279,7 @@
       "when": {
         "AW_ALERT_TARGET": "*"
       },
-      "hint": "Tạo bot riêng chỉ để báo lỗi: nhắn @BotFather, gõ /newbot, đặt tên, nhận token. Rồi mở bot đó trong Telegram và bấm Start (bot không nhắn trước được cho người chưa Start). Bot này chỉ gửi tin, không nhận lệnh, không gắn vào agent nào. Token lưu chmod 600; kit gửi thử 1 tin ngay để xác nhận. Đổi sau: kit alert-bot.",
+      "hint": "Tạo bot riêng chỉ để báo lỗi: nhắn @BotFather, gõ /newbot, đặt tên, nhận token. Rồi mở bot đó trong Telegram và bấm Start (bot không nhắn trước được cho người chưa Start). Kit gửi tin báo lỗi thẳng qua Bot API và (nếu bạn đồng ý, mặc định có) dùng luôn token này làm bot CHAT của agent tổng/agent mặc định: chỉ ID nhận ở trên được nhắn và là chủ sở hữu. Token lưu chmod 600; kit gửi thử 1 tin ngay để xác nhận. Đổi sau: kit alert-bot; gắn lại: kit alert-bind.",
       "example": "dạng 123456789:AA... do @BotFather cấp"
     },
     {

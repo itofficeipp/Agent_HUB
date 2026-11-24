@@ -34,7 +34,19 @@ elif a[:2] == ["models", "status"]:
     ag = a[a.index("--agent") + 1] if "--agent" in a else "main"
     sys.exit(0 if ag in (load().get("fake_auth") or []) else 1)
 elif a[:2] == ["config", "validate"]: print("ok" + ("\n2 warning(s):\n  ! plugins.entries.duckduckgo: plugin not installed: duckduckgo" if os.environ.get("FAKE_OC_WARN") else ""))
-elif a[:2] == ["agents", "list"]: print(json.dumps([{"id": k} for k in (load().get("agents") or {}).get("entries", {})]))
+elif a[:2] == ["agents", "list"]:
+    ents = list(((load().get("agents") or {}).get("entries") or {}))
+    dflt = ((load().get("agents") or {}).get("default")) or ("main" if "main" in ents else (ents[0] if ents else None))
+    print(json.dumps([{"id": k, "isDefault": k == dflt} for k in ents]))
+elif a[:2] == ["agents", "bind"]:
+    ag = a[a.index("--agent") + 1] if "--agent" in a else "main"; bd = a[a.index("--bind") + 1]
+    c = load(); lst = c.setdefault("bindings", []); ch, _, acc = bd.partition(":")
+    ent = {"agentId": ag, "match": {"channel": ch, "accountId": acc or "default"}}
+    if ent in lst: print("No bindings added (already bound)")
+    else: lst.append(ent); save(c); print("Added bindings")
+elif a[:2] == ["agents", "set-identity"]:
+    ag = a[a.index("--agent") + 1]; c = load()
+    c.setdefault("agents", {}).setdefault("entries", {}).setdefault(ag, {}).setdefault("identity", {})["name"] = a[a.index("--name") + 1]; save(c); print("Updated")
 elif a[:2] == ["agents", "add"]:
     ws = a[a.index("--workspace") + 1]; os.makedirs(ws, exist_ok=True)
     open(ws + "/BOOTSTRAP.md", "w").write("x"); c = load(); c.setdefault("agents", {}).setdefault("entries", {})[a[2]] = {"workspace": ws}; save(c); print("{}")
