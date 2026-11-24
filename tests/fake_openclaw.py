@@ -40,6 +40,7 @@ elif a[:2] == ["models", "status"]:
     ag = a[a.index("--agent") + 1] if "--agent" in a else "main"
     sys.exit(0 if ag in (load().get("fake_auth") or []) else 1)
 elif a[:3] == ["models", "auth", "list"]:
+    if os.environ.get("FAKE_LIST_FAIL"): print("Error: state store locked (fake)", file=sys.stderr); sys.exit(1)
     prov = opt(a, "--provider"); print("Agent: " + opt(a, "--agent", "main") + "\nAuth state store: ~/.openclaw/state/openclaw.sqlite\nProfiles:")
     for pid in (load().get("fake_profiles") or []):
         if not prov or pid.startswith(prov + ":"): print("- %s [anthropic/token; expires 2027-11-24T10:32:34.027Z]" % pid)

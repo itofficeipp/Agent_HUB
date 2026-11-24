@@ -194,6 +194,12 @@ rc, out = drive(KIT + ["model-backup"], [(r"Dán token", [GOOD4])], dict(E5, FAK
 lg = [l for l in gwlog() if l]
 ok("CHƯA lưu được token" in out and rj().get("fake_profiles") == ["anthropic:manual"] and open(GWS).read().strip() == "active" and " start " in lg[-1], "model-backup: lưu lỗi vẫn bật lại Gateway, không đổi profile", (out[-500:], lg))
 ok(GOOD4 not in out, "model-backup: nhật ký lỗi không lộ token")
+# auth list lỗi -> nói LÝ DO THẬT (ca thật trên Ubuntu 24/11), không đụng Gateway; doctor cũng báo
+reset5("active")
+rc, out = drive(KIT + ["model-backup"], [], dict(E5, FAKE_LIST_FAIL="1"))
+ok("state store locked" in out and "models auth list" in out and not any(" stop " in l for l in gwlog()), "model-backup: list lỗi thì in lý do thật + lệnh chạy tay, không đụng Gateway", out[-500:])
+d3 = sh(KIT + ["--tenant", "tc", "doctor"], env=dict(E5, FAKE_LIST_FAIL="1")).stdout
+ok("không đọc được danh sách tài khoản Claude" in d3 and "state store locked" in d3, "doctor: list lỗi -> báo kèm lý do", d3[-400:])
 r = sh(KIT + ["model-backup"], env=E5)
 ok(r.returncode != 0 and "terminal" in (r.stdout + r.stderr), "model-backup: không có terminal thì từ chối (token chỉ nhập ẩn)")
 reset5("active", ("anthropic:manual",)); d1 = sh(KIT + ["--tenant", "tc", "doctor"], env=E5).stdout

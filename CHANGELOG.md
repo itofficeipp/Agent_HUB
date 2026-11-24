@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.15
+- Sửa sau lần chạy THẬT đầu tiên của `kit model-backup` trên Ubuntu (OpenClaw 2026.11.8): lệnh báo "không đọc được danh sách tài khoản" mà không nói lý do. Giờ kit: thử `auth list` có rồi không có --provider, dùng được dòng profile dù mã thoát khác 0, và IN LÝ DO THẬT (dòng lỗi đầu của openclaw) cả ở model-backup lẫn doctor.
+- `kit update`: sau khi git pull kéo bản mới, tự nạp lại chính nó (trước đây doctor chạy ngay sau pull vẫn in số phiên bản cũ, thiếu kiểm tra mới). Tắt bằng KIT_NO_REEXEC=1.
+- Nguyên nhân gốc lỗi list trên Ubuntu CHƯA biết (chưa thấy lỗi thật); bản này để lộ ra.
+
 ## 0.3.14
 - **Mới `kit model-backup`: thêm tài khoản Claude DỰ PHÒNG cho agent tổng** (tài khoản 1 hết lượt/rate_limit thì OpenClaw tự dùng tài khoản 2; hết cooldown thì quay lại tài khoản 1). Một lệnh thay cho chuỗi lệnh tay anh Dũng đã chạy trên Ubuntu 24/11:
   - Hỏi token (nhập ẩn, bỏ khoảng trắng/xuống dòng thừa, kiểm dạng `sk-ant-oat01-...` trước khi dùng, dán sai thì báo nguyên nhân thường gặp).

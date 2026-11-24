@@ -506,15 +506,22 @@ def _gw_active():
     return bool(shutil.which("systemctl")) and run(["systemctl", "--user", "is-active", "--quiet", GW_UNIT]).returncode == 0
 def _gw(action): return run(["systemctl", "--user", action, GW_UNIT])
 
+MODEL_ERR = [""]
 def model_profiles(agent, provider="anthropic"):
-    """Các profile đã lưu của nhà cung cấp (đọc 'openclaw models auth list', không in bí mật). Lỗi -> None."""
-    r = run([OC, "models", "auth", "list", "--provider", provider, "--agent", agent], timeout=90)
-    if r.returncode != 0: return None
-    out = []
-    for l in (r.stdout + "\n" + r.stderr).splitlines():
-        m = re.match(r"\s*-\s+(" + re.escape(provider) + r":[^\s\[]+)", l)
-        if m and m.group(1) not in out: out.append(m.group(1))
-    return out
+    """Các profile đã lưu của nhà cung cấp (đọc 'openclaw models auth list', không in bí mật). Lỗi -> None, lý do thật ở MODEL_ERR[0].
+    Thử có --provider, rồi không có (bản OpenClaw khác nhau); lấy được dòng profile thì dùng dù mã thoát khác 0."""
+    tries = [[OC, "models", "auth", "list", "--provider", provider, "--agent", agent], [OC, "models", "auth", "list", "--agent", agent]]
+    errs = []
+    for cmd in tries:
+        try: r = run(cmd, timeout=90)
+        except Exception as e: errs.append(type(e).__name__ + ": " + str(e)[:160]); continue
+        out = []
+        for l in (r.stdout + "\n" + r.stderr).splitlines():
+            m = re.match(r"\s*-\s+(" + re.escape(provider) + r":[^\s\[]+)", l)
+            if m and m.group(1) not in out: out.append(m.group(1))
+        if out or r.returncode == 0: return out
+        errs.append("rc=%s: %s" % (r.returncode, ((r.stderr or r.stdout).strip().splitlines() or ["(không in gì)"])[0][:200]))
+    MODEL_ERR[0] = " | ".join(errs); return None
 
 def model_order(agent, provider="anthropic"):
     """Thứ tự ưu tiên đang đặt (cần Gateway TẮT). Không đọc được/chưa đặt -> []."""
@@ -531,7 +538,7 @@ def cmd_model_backup(a):
     if not sys.stdin.isatty(): die("kit model-backup cần chạy trong terminal (token nhập ẩn, không nhận qua tham số dòng lệnh)")
     prov = "anthropic"; agent = a.agent or default_agent_id()
     have = model_profiles(agent, prov)
-    if have is None: die("không đọc được danh sách tài khoản của agent '" + agent + "' (openclaw models auth list lỗi)")
+    if have is None: die("không đọc được danh sách tài khoản của agent '" + agent + "' (openclaw models auth list lỗi: " + MODEL_ERR[0] + "). Chạy tay xem: openclaw models auth list --agent " + agent)
     pid = a.profile_id
     if not pid:
         pid = prov + ":manual" if not have else next(prov + ":tk" + str(n) for n in range(2, 99) if prov + ":tk" + str(n) not in have)
@@ -638,6 +645,9 @@ def cmd_update(a):
     if (ROOT / ".git").exists():
         print("== git pull kit"); r = run(["git", "-C", str(ROOT), "pull", "--ff-only"]); print(r.stdout + r.stderr)
         if r.returncode != 0: die("git pull thất bại (có sửa tay trong kit? commit/stash rồi chạy lại)")
+        if "Already up to date" not in (r.stdout + r.stderr) and not os.environ.get("KIT_REEXEC") and not os.environ.get("KIT_NO_REEXEC"):
+            print("== kit đã đổi phiên bản: nạp lại bản mới rồi chạy tiếp"); sys.stdout.flush()
+            os.environ["KIT_REEXEC"] = "1"; os.execv(sys.executable, [sys.executable] + sys.argv)
     if a.with_openclaw:
         print("== openclaw update"); r = subprocess.run([OC, "update", "--yes"])
         if r.returncode != 0: die("openclaw update thất bại; kit chưa apply gì thêm")
@@ -733,6 +743,7 @@ def cmd_doctor(a):
             try:
                 mp = model_profiles(eff)
                 if mp is not None and len(mp) == 1: print("  CANH BAO model: mới có 1 tài khoản Claude (" + mp[0] + "); hết hạn mức là bot dừng. Thêm dự phòng: kit model-backup")
+                elif mp is None: print("  CANH BAO model: không đọc được danh sách tài khoản Claude (" + MODEL_ERR[0] + "). Chạy tay: openclaw models auth list --agent " + eff)
                 elif mp: print("  OK   model: có " + str(len(mp)) + " tài khoản Claude (" + ", ".join(mp) + "); xem thứ tự: dừng Gateway rồi openclaw models auth order get --provider anthropic --agent main")
             except Exception: pass
         a_tgt, a_tok = _alert_cfg(t)
