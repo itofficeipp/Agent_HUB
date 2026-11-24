@@ -3,11 +3,14 @@
 Tài liệu này gom các bước theo đúng thứ tự đã chạy thật. Mỗi mục ghi rõ ĐÃ THỬ THẬT ở đâu hoặc CHƯA THỬ. Chi tiết từng phần nằm ở các tài liệu khác (có liên kết).
 
 ## 0. Cần gì trước khi bắt đầu
-- Máy Linux (đã thử Ubuntu), chạy bằng **user thường, KHÔNG root**, có `sudo` (chỉ để cài gói và cấu hình needrestart), `git`, `python3`, systemd user. Docker cần cho sandbox của agent-web (xem `kit preflight`).
+- Máy Linux (đã thử Ubuntu), chạy bằng **user thường, KHÔNG root**, có `sudo`, `git` (thiếu: `sudo apt install -y git`), `python3`, systemd user.
+- **Docker Engine** (kit KHÔNG tự cài): cần cho sandbox của agent-web. Cài theo docs.docker.com/engine/install/ubuntu rồi `sudo usermod -aG docker $USER` và đăng nhập lại.
+- **Dịch vụ chạy nền khi không đăng nhập (linger):** `sudo loginctl enable-linger $USER` (kit không tự bật; `kit doctor` nhắc nếu thiếu). Không có thì Gateway và receiver chỉ chạy khi còn phiên đăng nhập.
+- `kit preflight` kiểm các mục trên và báo cách sửa.
 - OpenClaw từ **2026.10.9** trở lên. Đã chạy thật với 2026.10.9 (máy dev), 2026.11.7 (Lab sạch), 2026.11.8 (Ubuntu thật của anh Dũng: setup, model-backup, alert-bind). Khác biệt giữa các bản: mục 9.
 - Tài khoản Claude của công ty (lấy token ở mục 4).
 - Bot Telegram riêng cho công ty: nhắn @BotFather, `/newbot`, giữ token; mở bot bấm Start; lấy ID của bạn ở @userinfobot.
-- Phiên bản kit: bản đã chốt cho **một công ty/máy** là tag **v0.3.17**. Bản **0.4.0** thêm Gateway riêng cho công ty thứ hai trên cùng máy (mục 8); đã chạy đủ test với OpenClaw giả, CHƯA cài Gateway riêng thật.
+- Phiên bản kit: bản đã chốt cho **một công ty/máy** là tag **v0.3.17**. Từ bản **0.4.0** có thêm Gateway riêng cho công ty thứ hai trên cùng máy (mục 8); đã chạy đủ test với OpenClaw giả, CHƯA cài Gateway riêng thật.
 
 ## 1. Quyền đọc repo (một lần cho mỗi máy)
 Repo là private; mỗi máy dùng **khoá deploy chỉ đọc** riêng.
@@ -35,7 +38,7 @@ Năm bước: kiểm máy → tên công ty → chọn chức năng (`base`, `ag
 
 ## 4. Tài khoản Claude (token ủy quyền, không API key)
 Nguyên tắc: mỗi công ty một token từ chính tài khoản Claude của công ty đó; dùng runtime nhúng, **không** dùng runner `claude-cli` (`kit doctor` báo LỖI). Chi tiết: docs/MODEL-AUTH.md.
-- **Công ty đầu tiên (Gateway mặc định):** `bash ~/openclaw-kit/scripts/claude-login.sh` (hoặc để installer làm). Mở đường dẫn in ra bằng trình duyệt, đăng nhập đúng tài khoản, bấm cho phép, dán mã về; token 1 năm được lưu vào OpenClaw, không nằm trên dòng lệnh.
+- **Công ty đầu tiên (Gateway mặc định):** `bash ~/openclaw-kit/scripts/claude-login.sh` (hoặc để installer làm). Mở đường dẫn in ra bằng trình duyệt, đăng nhập đúng tài khoản, bấm cho phép, dán mã về; token 1 năm được lưu vào OpenClaw, không nằm trên dòng lệnh. Script tự tạm dừng và bật lại dịch vụ `openclaw-gateway` khi ghi token. Lưu ý (suy từ mã, CHƯA chạy trên 2026.11.8): bước "đã có đăng nhập thì bỏ qua" dùng `models auth list`, bản 2026.11.8 chỉ cho đọc khi Gateway tắt, nên script có thể không nhận ra đã có đăng nhập và đăng nhập lại (ghi đè `anthropic:manual`). Đã có đăng nhập rồi thì đừng chạy lại script này.
 - **Công ty có Gateway riêng (mục 8):** KHÔNG dùng `claude-login.sh` (nó ghi vào Gateway mặc định). Dùng `kit --tenant <ten> model-backup`: Gateway mới còn trống nên token đầu tiên thành tài khoản chính `anthropic:manual`.
 - Agent nhân viên (tạo qua webhook) thừa hưởng credential của agent chủ (`AW_AUTH_OWNER`, mặc định `main`); kit tự đặt `authInheritance`, `kit doctor` báo LỖI nếu agent chủ chưa có token. Dùng chung nghĩa là mọi nhân viên chung hạn mức tài khoản đó.
 - Sandbox: `kit sandbox-image` (OpenClaw không tự dựng image; thiếu image thì agent dừng hẳn, an toàn nhưng không trả lời).
@@ -65,7 +68,7 @@ Sau `kit setup` (đã chọn `agent-web`):
 2. `kit run agent-web add-caller <ten-web>`: tạo bên gọi webhook; mật khẩu và HMAC key ghi vào file chmod 600, **không in ra màn hình**; đưa cho dev web rồi `shred -u` file.
 3. Đưa ra Internet: làm theo `~/.config/openclaw-kit/tenants/<ten>/agent-web/expose/HUONG_DAN.md` (Cloudflare Tunnel hoặc mở port; docs/EXPOSE.md). Web bên ngoài gọi `<AW_PUBLIC_URL>/webhook/<AW_WEBHOOK_PATH>`. Cloudflare named tunnel + DNS và mở port/router thật: CHƯA THỬ.
 4. Thử: `kit run agent-web test-webhook --user <ten> --password <mk> --secret <hmac>` (receiver tích hợp kỳ vọng 201/200/409/401/401/422/422/401). Đừng gõ nguyên dấu `<...>` trong bash (bash coi là chuyển hướng); thay bằng giá trị thật.
-5. Khi ổn: bật dịch vụ nền `AW_AUTOSTART=yes` rồi `kit apply` (hoặc `systemctl --user enable --now openclaw-kit-agentweb-provision.timer`).
+5. Khi ổn: bật dịch vụ nền tự chạy: `kit enable agent-web --set AW_AUTOSTART=yes` rồi `kit apply` (mặc định `AW_AUTOSTART=no`; hoặc `systemctl --user enable --now openclaw-kit-agentweb-provision.timer`). Công ty có Gateway riêng: thêm `--tenant <ten>` và tên unit có hậu tố, ví dụ `openclaw-kit-agentweb-ipp-provision.timer`.
 6. Công cụ cho agent (tuỳ chọn): `AW_TOOLS_WEB=yes` (+ `AW_TOOLS_BROWSER`, `AW_TOOLS_RUNTIME`), sau `apply` chạy `kit run agent-web open-tools --dry-run` xem trước rồi bỏ `--dry-run`.
 7. Kiểm: `kit doctor` phải "Tất cả OK". Telegram thật cho từng nhân viên và n8n thật: CHƯA THỬ (docs/TESTING.md).
 
@@ -73,7 +76,7 @@ Sau `kit setup` (đã chọn `agent-web`):
 Mỗi công ty = một tenant có **Gateway OpenClaw riêng** (`openclaw --profile <p>`): dữ liệu `~/.openclaw-<p>`, dịch vụ `openclaw-gateway-<p>`, cổng riêng, bot Telegram riêng. Lỗi bên này không ảnh hưởng công ty kia. Ví dụ công ty ipp:
 ```bash
 kit init ipp --oc-profile ipp --oc-port 19009
-kit --tenant ipp gateway-install       # hỏi xác nhận; thêm dịch vụ systemd user MỚI openclaw-gateway-ipp
+kit --tenant ipp gateway-install       # hỏi xác nhận; chạy openclaw --profile ipp gateway install --port 19009 (thêm dịch vụ systemd user MỚI openclaw-gateway-ipp)
 kit setup ipp                          # luôn kèm tên; chọn base + agent-web
 kit --tenant ipp alert-bot             # bot Telegram RIÊNG của ipp
 kit --tenant ipp model-backup          # token Claude đầu tiên của Gateway ipp
@@ -88,14 +91,15 @@ kit --tenant ipp doctor
 - Không dùng `scripts/claude-login.sh` cho Gateway riêng. Kit không tự sao chép đăng nhập giữa hai Gateway; dùng chung tài khoản Claude thì dán cùng một token và lượt dùng tính chung.
 - Gõ tay lệnh OpenClaw cho Gateway riêng: `openclaw --profile ipp ...` hoặc `~/.config/openclaw-kit/tenants/ipp/bin/openclaw ...`. CLI KHÔNG tôn trọng biến `OPENCLAW_PROFILE` (đã kiểm thật 2026.10.9), chỉ cờ `--profile`.
 - Gateway ở máy khác qua SSH (`AW_GATEWAY_SSH`) chưa hỗ trợ profile; kit từ chối rõ.
+- `gateway-install` đặt `gateway.mode=local` cho profile mới (nếu chưa có cấu hình) rồi mới cài dịch vụ; cờ `--port` và `--force` của `openclaw gateway install` đã xem trong `--help` (2026.10.9). Chạy lại có `--force` nếu dịch vụ đã tồn tại.
 - Kiểm: `systemctl --user status openclaw-gateway-ipp`; Gateway cũ `systemctl --user status openclaw-gateway` phải vẫn chạy. CHƯA THỬ thật cờ `--profile` trên OpenClaw 2026.11.8. Chi tiết: docs/MULTI-COMPANY.md.
 
 ## 9. Khác biệt theo bản OpenClaw (đã gặp thật)
-- **2026.11.8:** `models auth list` và `paste-token` đòi Gateway TẮT ("exclusive offline state owner"); `kit model-backup` tự xử lý (tạm dừng vài giây, rồi bật lại, hỏi trước). Thêm tài khoản thứ hai phải có `--profile-id` (kit tự đặt `anthropic:tk2`). Máy dev 2026.10.9 không đòi, nên test cục bộ không bắt được lỗi này: luôn thử bản OpenClaw của máy khách.
+- **2026.11.8:** `models auth list` và `paste-token` đòi Gateway TẮT ("exclusive offline state owner"); `kit model-backup` tự xử lý (tạm dừng vài giây, rồi bật lại, hỏi trước). Thêm tài khoản thứ hai phải có `--profile-id`, nếu không OpenClaw lưu đè vào `anthropic:manual` (mặc định của `paste-token`); kit luôn tự đặt `anthropic:tk2`. Máy dev 2026.10.9 không đòi, nên test cục bộ không bắt được lỗi này: luôn thử bản OpenClaw của máy khách.
 - **2026.11.7:** provider web search `duckduckgo` là plugin ngoài; `kit doctor` báo CANH BAO. Cài: `openclaw plugins install npm:@openclaw/duckduckgo-plugin` hoặc chọn provider khác (`AW_SEARCH_PROVIDER`).
 
 ## 10. Cập nhật và khôi phục
-`kit update` (kit mới + migrations + apply + doctor), `kit update --with-openclaw` (thêm `openclaw update --yes`). Máy production: chạy `kit apply --dry-run` trước, cập nhật OpenClaw ngoài giờ làm việc. Hoàn tác: copy lại `openclaw.json.<giờ>` trong `~/.config/openclaw-kit/backups/` rồi `openclaw gateway restart`. Chi tiết: docs/UPDATING.md.
+`kit update` (kit mới + migrations + apply + doctor), `kit update --with-openclaw` (thêm `openclaw update --yes`). Máy production: chạy `kit apply --dry-run` trước, cập nhật OpenClaw ngoài giờ làm việc. Hoàn tác: copy lại `openclaw.json.<giờ>` trong `~/.config/openclaw-kit/backups/` rồi `openclaw gateway restart` (Gateway riêng: `openclaw --profile ipp gateway restart`). Chi tiết: docs/UPDATING.md.
 
 ## 11. Gặp lỗi thì xem
 | Hiện tượng | Nguyên nhân thường gặp | Cách xử lý |
@@ -107,6 +111,7 @@ kit --tenant ipp doctor
 | Agent nhân viên lỗi "No API key found for provider anthropic" | agent chủ chưa có token hoặc chưa `authInheritance` | dán token vào agent chủ; `kit run agent-web auth-owner` |
 | Agent dừng "Sandbox image not found" | chưa dựng image | `kit sandbox-image` |
 | Lệnh trên công ty thứ hai lại ghi vào công ty đầu | thiếu `--tenant` | luôn `kit --tenant <ten> ...` ; `kit use <ten>` |
+| `kit doctor` cảnh báo docker hoặc linger | Docker chưa cài/chưa vào nhóm docker; dịch vụ user dừng khi đăng xuất | mục 0: cài Docker, `sudo usermod -aG docker $USER`, `sudo loginctl enable-linger $USER` |
 | Bot Telegram không trả lời | chưa Start bot; ID sai; Gateway tắt | `kit alert-test`; `kit doctor`; `timeout 50 openclaw channels status --probe --json` |
 
 ## 12. Bảo mật tóm tắt

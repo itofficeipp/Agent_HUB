@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.4.2 - 2026-11-25
+- Tài liệu: rà lại docs/CAI_DAT.md với mã và `--help` thật (35 lệnh/cờ khớp); bổ sung điều kiện Docker và linger (kit không tự cài), lệnh bật `AW_AUTOSTART` đúng, cách restart Gateway riêng, lưu ý `claude-login.sh` trên 2026.11.8 (CHƯA thử), ghi rõ `paste-token` không có `--profile-id` sẽ ghi đè `anthropic:manual`.
+
 ## 0.4.1 - 2026-11-25
 - Sửa lỗi phát hiện khi viết hướng dẫn: `kit setup` không kèm tên (gõ tên ở bước 2) có thể ghi nhầm vào Gateway của tenant đang chọn; nay dừng và bảo chạy `kit setup <tên>` (2 ca test mới). Gợi ý sau `gateway-install` in đúng thứ tự `kit --tenant <t> model-backup` (trước đây `--tenant` đặt sai chỗ).
 - Tài liệu: viết lại hướng dẫn cài đặt thành docs/CAI_DAT.md (từ máy trống đến chạy được, ghi rõ ĐÃ THỬ/CHƯA THỬ, khác biệt OpenClaw 2026.11.8, bảng xử lý lỗi); README, NEW_COMPANY, MODEL-AUTH, UPDATING trỏ về đó.
