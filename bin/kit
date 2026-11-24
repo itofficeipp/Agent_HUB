@@ -553,6 +553,8 @@ def model_order(agent, provider="anthropic"):
         if "order" in l.lower(): out += re.findall(re.escape(provider) + r":[^\s,\[\]]+", l)
     return list(dict.fromkeys(out))
 
+TOKEN_PFX = "sk" + "-ant-oat01-"
+
 def cmd_model_backup(a):
     """Thêm tài khoản Claude DỰ PHÒNG cho agent tổng: tài khoản 1 hết lượt thì tự chuyển qua tài khoản 2."""
     if not oc_available(): die("chưa thấy openclaw trong PATH")
@@ -564,22 +566,28 @@ def cmd_model_backup(a):
         if not yesno("   Tiếp tục?", True, True): print("   Đã hủy, chưa đổi gì."); return
         have = model_profiles_offline(agent, prov, True)
     if have is None: die("không đọc được danh sách tài khoản của agent '" + agent + "' (openclaw models auth list lỗi: " + MODEL_ERR[0] + "). Chạy tay xem: openclaw models auth list --agent " + agent)
+    order_only = len(have) >= 2 and not a.profile_id and yesno("   Đã có " + str(len(have)) + " tài khoản (" + ", ".join(have) + "). CHỈ đặt thứ tự dự phòng, KHÔNG thêm token mới?", True, True)
     pid = a.profile_id
-    if not pid:
+    if not pid and not order_only:
         pid = prov + ":manual" if not have else next(prov + ":tk" + str(n) for n in range(2, 99) if prov + ":tk" + str(n) not in have)
-    if not re.fullmatch(prov + r":[A-Za-z0-9_.-]{1,40}", pid): die("--profile-id phải dạng " + prov + ":ten (chữ, số, _ . -)")
+    if not order_only and not re.fullmatch(prov + r":[A-Za-z0-9_.-]{1,40}", pid): die("--profile-id phải dạng " + prov + ":ten (chữ, số, _ . -)")
     print("== Tài khoản model dự phòng cho agent '" + agent + "'")
-    print("   Đã lưu: " + (", ".join(have) if have else "(chưa có)") + ". Sẽ thêm: " + pid)
+    print("   Đã lưu: " + (", ".join(have) if have else "(chưa có)") + (". Chỉ đặt thứ tự, không thêm token." if order_only else ". Sẽ thêm: " + pid))
     if not have: print("   ! Chưa có tài khoản nào: token này sẽ là tài khoản CHÍNH (dùng docs/MODEL-AUTH.md để lấy token). Muốn thêm dự phòng sau khi có tài khoản chính: chạy lại lệnh này.")
-    if pid in have and not yesno("   Profile " + pid + " đã có; GHI ĐÈ token cũ bằng token mới?", False, True):
+    if not order_only and pid in have and not yesno("   Profile " + pid + " đã có; GHI ĐÈ token cũ bằng token mới?", False, True):
         print("   Giữ nguyên, không đổi gì."); return
-    print("   Cách lấy token: trên máy có trình duyệt, đăng nhập ĐÚNG tài khoản Claude số 2, chạy:  claude setup-token  (link in ra mở bằng trình duyệt, dán mã về). Token dạng sk-ant-oat01-... chỉ hiện một lần.")
     tok = ""
-    for _ in range(5):
-        v = re.sub(r"\s+", "", getpass.getpass("\n   Dán token (nhập ẩn; khoảng trắng/xuống dòng thừa được bỏ qua) > "))
-        if re.fullmatch(r"sk-ant-oat01-[A-Za-z0-9_-]{20,}", v): tok = v; break
-        print("   ! chuỗi vừa dán không phải token (phải bắt đầu bằng sk-ant-oat01-). Có thể dán nhầm mã xác nhận ở trình duyệt hoặc thiếu đoạn đầu/cuối; dán lại")
-    if not tok: die("token nhập sai 5 lần")
+    if not order_only:
+        print("   Cách lấy token: trên máy có trình duyệt, đăng nhập ĐÚNG tài khoản Claude số 2, chạy:  claude setup-token  (link in ra mở bằng trình duyệt, dán mã về). Token dạng sk-ant-oat01-... chỉ hiện một lần.")
+        for _ in range(5):
+            raw = getpass.getpass("\n   Dán token (nhập ẩn; khoảng trắng/xuống dòng thừa được bỏ qua) > ")
+            v = re.sub(r"\x1b\[[0-9;?]*[ -/]*[@-~]|\[20[01]~", "", raw)      # ký tự điều khiển của terminal (dán nhanh) lọt vào
+            v = re.sub(r"[^\x21-\x7e]", "", v)                                 # bỏ khoảng trắng, xuống dòng, ký tự lạ
+            m = re.search(re.escape(TOKEN_PFX) + r"[A-Za-z0-9_-]{20,}", v)
+            if m: tok = m.group(0); break
+            print("   ! chuỗi vừa dán không phải token: dài " + str(len(v)) + " ký tự, bắt đầu bằng '" + v[:4] + "'. Token thật bắt đầu bằng " + TOKEN_PFX + " và dài khoảng 100 ký tự. "
+                  + ("Chuỗi này quá ngắn: thường là mã xác nhận ở trình duyệt, KHÔNG phải token; token in ra ở terminal sau khi dán mã đó." if len(v) < 60 else "Có thể bị cắt mất đoạn đầu/cuối khi copy (token xuống dòng nhiều dòng thì chọn hết cả khối)."))
+        if not tok: die("token nhập sai 5 lần")
     was = _gw_active()
     if not yesno("\n   Tạm dừng Gateway vài giây để ghi token (OpenClaw bắt buộc), xong tự bật lại. Tiếp tục?", True, True): print("   Đã hủy, chưa đổi gì."); return
     rc = 1
@@ -589,7 +597,7 @@ def cmd_model_backup(a):
             if r.returncode != 0: die("không dừng được Gateway: " + (r.stderr or r.stdout).strip()[:300])
             print("   Gateway đã dừng.")
         feeder = str(ROOT / "scripts" / "pty_feed.py")
-        for i in range(4):
+        for i in range(0 if order_only else 4):
             r = subprocess.run([sys.executable, feeder, "token", "--", OC, "models", "auth", "paste-token", "--provider", prov, "--agent", agent, "--profile-id", pid, "--expires-in", "365d"],
                                input=tok, capture_output=True, text=True, timeout=180)
             log = (r.stdout or "").replace(tok, "***")
@@ -600,7 +608,7 @@ def cmd_model_backup(a):
         after = model_profiles(agent, prov) or []
         cur = [x for x in model_order(agent, prov) if x in after]
         first = [x for x in after if x == prov + ":manual"] if not cur else []
-        final = list(dict.fromkeys(cur + first + [x for x in after if x != pid] + [pid]))
+        final = list(dict.fromkeys(cur + first + [x for x in after if x != pid] + ([pid] if pid else [])))
         r = run([OC, "models", "auth", "order", "set", "--provider", prov, "--agent", agent] + final, timeout=90)
         if r.returncode != 0: print("   CHƯA đặt được thứ tự: " + (r.stderr or r.stdout).strip()[:300] + "\n   Token đã lưu; đặt tay: openclaw models auth order set --provider " + prov + " --agent " + agent + " " + " ".join(final)); return
         got = model_order(agent, prov); rc = 0 if got == final else 2

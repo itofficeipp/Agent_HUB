@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.17 - 2026-11-24
+- kit model-backup: khi đã có từ 2 tài khoản thì hỏi "CHỈ đặt thứ tự dự phòng, KHÔNG thêm token mới?" (mặc định có); không đòi token, không thêm tài khoản thứ 3. Gateway dừng/bật lại 1 lần.
+- Nhập token: lọc ký tự điều khiển của terminal khi dán nhanh, nhận token nằm lẫn trong chuỗi dài; khi dán sai báo độ dài và 4 ký tự đầu (không lộ token), nhắc mã xác nhận ở trình duyệt không phải token.
+- Test: thêm 3 ca (chỉ đặt thứ tự, dán sai, ký tự điều khiển). test_alert 75 PASS.
+
 ## 0.3.16
 - **Nguyên nhân thật** (ảnh Ubuntu 24/11, OpenClaw 2026.11.8): `openclaw models auth list` đòi Gateway TẮT ("requires exclusive offline state ownership"); bản 2026.10.9 trên máy phát triển thì không đòi, nên 0.3.14/0.3.15 báo "không đọc được danh sách tài khoản". Sửa: kit đọc danh sách qua `openclaw models status --json` (chạy được khi Gateway bật; chỉ lấy id profile, không lấy token); nếu cũng không được thì hỏi rồi tạm dừng Gateway vài giây để đọc và bật lại ngay.
 - `kit doctor`: không đọc được vì Gateway chạy thì chỉ gợi ý `kit model-backup`, không báo lỗi giả.

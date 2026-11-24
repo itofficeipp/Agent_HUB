@@ -179,7 +179,7 @@ ok(GOOD2 not in out and GOOD2 not in open(ARGV).read() and "***" not in "x", "mo
 ok("đã đọc lại: khớp" in out, "model-backup: đọc lại thứ tự thấy khớp")
 # token dán sai trước (báo rõ), rồi dán có khoảng trắng chen giữa: vẫn nhận; Gateway đang tắt sẵn -> kit không đụng systemctl stop/start
 reset5("inactive", ("anthropic:manual", "anthropic:tk2"), ["anthropic:manual", "anthropic:tk2"])
-rc, out = drive(KIT + ["model-backup"], [(r"Dán token", ["abc", GOOD3[:30] + " " + GOOD3[30:]])], E5)
+rc, out = drive(KIT + ["model-backup"], [(r"CHỈ đặt thứ tự", ["n"]), (r"Dán token", ["abc", GOOD3[:30] + " " + GOOD3[30:]])], E5)
 c = rj(); lg = [l for l in gwlog() if l]
 ok(rc == 0 and "không phải token" in out and c.get("fake_profiles")[-1] == "anthropic:tk3", "model-backup: token sai báo rõ, dán lại có khoảng trắng thừa vẫn nhận (tk3)", out[-600:])
 ok((c.get("fake_order") or {}).get("anthropic") == ["anthropic:manual", "anthropic:tk2", "anthropic:tk3"], "model-backup: giữ thứ tự cũ, thêm cuối", c.get("fake_order"))
@@ -215,6 +215,17 @@ lg = [l for l in gwlog() if l]; c = rj()
 ok(rc == 0 and c.get("fake_profiles") == ["anthropic:manual", "anthropic:tk2"] and sum(" stop " in l for l in lg) == 2 and sum(" start " in l for l in lg) == 2 and open(GWS).read().strip() == "active", "model-backup: list và status đều không đọc được khi Gateway chạy -> dừng/bật để đọc rồi làm tiếp", (out[-600:], lg))
 d5 = sh(KIT + ["--tenant", "tc", "doctor"], env=dict(E5, FAKE_LIST_OFFLINE="1", FAKE_STATUS_FAIL="1")).stdout
 ok("kit model-backup" in d5 and "CANH BAO model" not in d5, "doctor: không đọc được vì Gateway chạy -> chỉ gợi ý, không báo lỗi giả", d5[-400:])
+# anh Dũng 24/11: đã có manhual+tk2 mà kit đòi thêm tk3 -> giờ hỏi "CHỈ đặt thứ tự" (mặc định có), không đòi token
+reset5("active", ("anthropic:manual", "anthropic:tk2"))
+rc, out = drive(KIT + ["model-backup"], [], E5)
+lg = [l for l in gwlog() if l]; c = rj()
+ok(rc == 0 and (c.get("fake_order") or {}).get("anthropic") == ["anthropic:manual", "anthropic:tk2"] and c.get("fake_profiles") == ["anthropic:manual", "anthropic:tk2"], "model-backup: đã có 2 tài khoản -> chỉ đặt thứ tự, không đòi token, không thêm tk3", (out[-600:], c.get("fake_order")))
+ok("Dán token" not in out and sum(" stop " in l for l in lg) == 1 and open(GWS).read().strip() == "active", "model-backup: chế độ chỉ đặt thứ tự dừng/bật Gateway 1 lần, không hỏi token", lg)
+# chuỗi dán sai: báo độ dài + 4 ký tự đầu (không lộ token), ký tự điều khiển dán nhanh bị lọc, token lẫn trong chuỗi dài vẫn nhận
+reset5("active", ("anthropic:manual",))
+junk = "\x1b[200~" + GOOD4[:50] + "\n" + GOOD4[50:] + "\x1b[201~"
+rc, out = drive(KIT + ["model-backup"], [(r"Dán token", ["ZZZZ" + "q" * 20, junk])], E5)
+ok("dài 24 ký tự, bắt đầu bằng 'ZZZZ'" in out and "mã xác nhận" in out and rj().get("fake_profiles") == ["anthropic:manual", "anthropic:tk2"] and GOOD4 not in out, "model-backup: dán sai báo độ dài + 4 ký tự đầu; dán có ký tự điều khiển vẫn nhận", out[-700:])
 r = sh(KIT + ["model-backup"], env=E5)
 ok(r.returncode != 0 and "terminal" in (r.stdout + r.stderr), "model-backup: không có terminal thì từ chối (token chỉ nhập ẩn)")
 reset5("active", ("anthropic:manual",)); d1 = sh(KIT + ["--tenant", "tc", "doctor"], env=E5).stdout
