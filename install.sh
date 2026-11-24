@@ -41,6 +41,15 @@ if ! command -v openclaw >/dev/null; then
 fi
 export PATH="$HOME/.npm-global/bin:$HOME/.local/bin:$PATH"
 openclaw --version
+# Claude Code (bản cài chính thức, vào ~/.local/bin, không cần root): chỉ để lấy token đăng nhập Claude bằng trình duyệt (scripts/claude-login.sh).
+# KIT_CLAUDE_CODE=no để bỏ qua. Không dùng làm runner của OpenClaw.
+if [ "${KIT_CLAUDE_CODE:-yes}" = yes ] && ! command -v claude >/dev/null; then
+  say "Cài Claude Code (để đăng nhập Claude bằng trình duyệt)"
+  CC_TMP="$(mktemp)"
+  if curl -fsSL -m 90 https://claude.ai/install.sh -o "$CC_TMP" && bash "$CC_TMP" </dev/null; then command -v claude >/dev/null && claude --version || true
+  else echo "LƯU Ý: chưa cài được Claude Code (không chặn việc cài). Cài sau: curl -fsSL https://claude.ai/install.sh | bash"; fi
+  rm -f "$CC_TMP"
+fi
 # giữ PATH cho các lần đăng nhập sau (chỉ thêm 1 lần)
 case "$(cat "$HOME/.bashrc" 2>/dev/null)" in *".npm-global/bin"*) ;; *)
   printf '\n# openclaw-kit\nexport PATH="$HOME/.local/bin:$HOME/.npm-global/bin:$PATH"\n' >> "$HOME/.bashrc"; echo "Đã thêm PATH vào ~/.bashrc (mở lại terminal để có hiệu lực)";; esac
@@ -134,10 +143,21 @@ Gỡ lỗi chính thức:  openclaw gateway uninstall; systemctl --user reset-fa
 EOF
   exit 1
 fi
+# Đăng nhập Claude bằng trình duyệt của người dùng (ủy quyền OAuth) ngay trong lúc cài. Cần terminal có bàn phím; KIT_CLAUDE_LOGIN=no để bỏ qua.
+CLAUDE_LOGIN_DONE=0
+if [ "${KIT_CLAUDE_LOGIN:-auto}" != no ] && command -v claude >/dev/null; then
+  [ -f "$KIT_DIR/scripts/claude-login.sh" ] || git -C "$KIT_DIR" pull -q --ff-only 2>/dev/null || true
+  if openclaw models auth list 2>/dev/null | grep -qi anthropic; then CLAUDE_LOGIN_DONE=1; echo "Đã có đăng nhập Anthropic, bỏ qua bước đăng nhập Claude."
+  elif [ ! -f "$KIT_DIR/scripts/claude-login.sh" ]; then echo "LƯU Ý: kit chưa có scripts/claude-login.sh (cập nhật kit: git -C $KIT_DIR pull)."
+  elif [ -t 0 ] && [ -t 1 ]; then
+    say "Đăng nhập Claude (trình duyệt của bạn)"
+    if bash "$KIT_DIR/scripts/claude-login.sh"; then CLAUDE_LOGIN_DONE=1; else echo "LƯU Ý: chưa đăng nhập Claude, làm sau: bash $KIT_DIR/scripts/claude-login.sh"; fi
+  else echo "Không có terminal có bàn phím: đăng nhập Claude sau bằng: bash $KIT_DIR/scripts/claude-login.sh"; fi
+fi
 cat <<EOF
 
-Xong phần cài. OpenClaw đã được thiết lập mặc định (chưa có đăng nhập model). Bước tiếp:
-  1) token Claude của công ty:  systemctl --user stop openclaw-gateway; openclaw models auth paste-token --provider anthropic --agent main --expires-in 365d; systemctl --user start openclaw-gateway
+Xong phần cài. OpenClaw đã được thiết lập mặc định. Bước tiếp:
+  1) $([ "$CLAUDE_LOGIN_DONE" = 1 ] && echo "(xong) đăng nhập Claude đã lưu" || echo "đăng nhập Claude của công ty bằng trình duyệt:  bash $KIT_DIR/scripts/claude-login.sh")
   2) kit setup <ten-cong-ty>            # hỏi từng thông số có gợi ý, xem trước, dựng, kiểm tra, nói bước tiếp
   (nhiều công ty/không hỏi: kit setup <ten> --yes --params-file file.json ;  chỉ kiểm máy: kit preflight)
 EOF

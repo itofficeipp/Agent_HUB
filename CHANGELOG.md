@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.11
+- **install.sh cài Claude Code ngay lúc cài đặt** (bộ cài chính thức claude.ai, vào \`~/.local/bin\`, không cần root). Bỏ qua bằng \`KIT_CLAUDE_CODE=no\`. Claude Code chỉ dùng để lấy token; KHÔNG dùng runner claude-cli.
+- **Đăng nhập Claude bằng trình duyệt của người dùng, ngay trên Linux**: mới \`scripts/claude-login.sh\` chạy \`claude setup-token\` (in URL claude.ai để mở trên máy người dùng, dán mã về), tự bắt token, tạm dừng Gateway, lưu bằng \`openclaw models auth paste-token\` (profile \`anthropic:manual\`, hết hạn 365 ngày), bật lại Gateway, xóa file tạm (shred). Token không nằm trên dòng lệnh. install.sh tự gọi khi có terminal và chưa có đăng nhập Anthropic (bỏ qua bằng \`KIT_CLAUDE_LOGIN=no\`); chạy lại/gia hạn: \`bash scripts/claude-login.sh --force\`.
+- \`scripts/pty_feed.py\`: đưa bí mật vào dấu nhắc qua pty (đặt cỡ cửa sổ, đợi dấu nhắc hiện). Sửa lỗi paste-token không nhận khi pty rộng 0 cột.
+- Đã thử thật trên VM114 (user thường \`kt\`) với \`claude\` GIẢ: lấy token, lưu profile anthropic, Gateway active lại. CHƯA thử với tài khoản Claude thật (cần trình duyệt của người dùng): định dạng in của \`claude\` thật có thể làm bước bắt token trượt, khi đó script nhờ dán tay.
+
 ## 0.3.10
 - **add-caller không in bí mật ra màn hình nữa**: mật khẩu + HMAC key ghi vào `<tenant>/agent-web/secrets/caller-<ten>.txt` (file chmod 600, thư mục 700); màn hình chỉ in đường dẫn và lệnh xoá (`shred -u`). `--print` để in như cũ. Lý do: bí mật từng lộ qua ảnh chụp màn hình. Test: test_all (file 600, stdout không có "password") và test_local (--print) đều PASS.
 - **install.sh: KIT_ONBOARD=prompt** chạy wizard `openclaw onboard` có hỏi (vẫn cài dịch vụ, chọn cổng trống, kiểm tra Gateway). Không có terminal (stdin không phải tty) thì tự chuyển về thiết lập mặc định. Đã thử thật trên VM114: nhánh không-tty (RC=0, Gateway OK) và nhánh có tty (wizard mở đúng, nhận --gateway-port). CHƯA đi hết wizard tương tác tới cuối.
