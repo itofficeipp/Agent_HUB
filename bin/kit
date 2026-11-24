@@ -521,7 +521,28 @@ def model_profiles(agent, provider="anthropic"):
             if m and m.group(1) not in out: out.append(m.group(1))
         if out or r.returncode == 0: return out
         errs.append("rc=%s: %s" % (r.returncode, ((r.stderr or r.stdout).strip().splitlines() or ["(không in gì)"])[0][:200]))
+    # OpenClaw 2026.11.8: 'auth list' đòi Gateway TẮT. 'models status --json' đọc được khi Gateway chạy (chỉ lấy id profile, không lấy token).
+    try:
+        r = run([OC, "models", "status", "--agent", agent, "--json"], timeout=90)
+        i = r.stdout.find("{")
+        if r.returncode == 0 and i >= 0:
+            d = json.loads(r.stdout[i:]); out = []
+            for pr in ((d.get("auth") or {}).get("providers") or []):
+                if pr.get("provider") != provider: continue
+                for lab in ((pr.get("profiles") or {}).get("labels") or []):
+                    m = re.match(r"(" + re.escape(provider) + r":[^=\s]+)=", lab)
+                    if m and m.group(1) not in out: out.append(m.group(1))
+            return out
+        errs.append("models status rc=%s" % r.returncode)
+    except Exception as e: errs.append("models status: " + type(e).__name__)
     MODEL_ERR[0] = " | ".join(errs); return None
+
+def model_profiles_offline(agent, provider, was):
+    """Gateway đang chạy mà OpenClaw đòi tắt mới đọc được danh sách: tạm dừng vài giây, đọc, bật lại ngay."""
+    if not was: return model_profiles(agent, provider)
+    if _gw("stop").returncode != 0: return None
+    try: return model_profiles(agent, provider)
+    finally: _gw("start")
 
 def model_order(agent, provider="anthropic"):
     """Thứ tự ưu tiên đang đặt (cần Gateway TẮT). Không đọc được/chưa đặt -> []."""
@@ -538,6 +559,10 @@ def cmd_model_backup(a):
     if not sys.stdin.isatty(): die("kit model-backup cần chạy trong terminal (token nhập ẩn, không nhận qua tham số dòng lệnh)")
     prov = "anthropic"; agent = a.agent or default_agent_id()
     have = model_profiles(agent, prov)
+    if have is None and "offline state" in MODEL_ERR[0] and _gw_active():
+        print("   OpenClaw bản này chỉ cho đọc danh sách tài khoản khi Gateway TẮT: tạm dừng vài giây để đọc, rồi bật lại ngay.")
+        if not yesno("   Tiếp tục?", True, True): print("   Đã hủy, chưa đổi gì."); return
+        have = model_profiles_offline(agent, prov, True)
     if have is None: die("không đọc được danh sách tài khoản của agent '" + agent + "' (openclaw models auth list lỗi: " + MODEL_ERR[0] + "). Chạy tay xem: openclaw models auth list --agent " + agent)
     pid = a.profile_id
     if not pid:
@@ -743,6 +768,7 @@ def cmd_doctor(a):
             try:
                 mp = model_profiles(eff)
                 if mp is not None and len(mp) == 1: print("  CANH BAO model: mới có 1 tài khoản Claude (" + mp[0] + "); hết hạn mức là bot dừng. Thêm dự phòng: kit model-backup")
+                elif mp is None and "offline state" in MODEL_ERR[0]: print("  --   model: OpenClaw bản này không cho đọc danh sách tài khoản Claude khi Gateway chạy; xem/thêm dự phòng bằng: kit model-backup")
                 elif mp is None: print("  CANH BAO model: không đọc được danh sách tài khoản Claude (" + MODEL_ERR[0] + "). Chạy tay: openclaw models auth list --agent " + eff)
                 elif mp: print("  OK   model: có " + str(len(mp)) + " tài khoản Claude (" + ", ".join(mp) + "); xem thứ tự: dừng Gateway rồi openclaw models auth order get --provider anthropic --agent main")
             except Exception: pass

@@ -196,10 +196,25 @@ ok("CHƯA lưu được token" in out and rj().get("fake_profiles") == ["anthrop
 ok(GOOD4 not in out, "model-backup: nhật ký lỗi không lộ token")
 # auth list lỗi -> nói LÝ DO THẬT (ca thật trên Ubuntu 24/11), không đụng Gateway; doctor cũng báo
 reset5("active")
-rc, out = drive(KIT + ["model-backup"], [], dict(E5, FAKE_LIST_FAIL="1"))
+rc, out = drive(KIT + ["model-backup"], [], dict(E5, FAKE_LIST_FAIL="1", FAKE_STATUS_FAIL="1"))
 ok("state store locked" in out and "models auth list" in out and not any(" stop " in l for l in gwlog()), "model-backup: list lỗi thì in lý do thật + lệnh chạy tay, không đụng Gateway", out[-500:])
-d3 = sh(KIT + ["--tenant", "tc", "doctor"], env=dict(E5, FAKE_LIST_FAIL="1")).stdout
+d3 = sh(KIT + ["--tenant", "tc", "doctor"], env=dict(E5, FAKE_LIST_FAIL="1", FAKE_STATUS_FAIL="1")).stdout
 ok("không đọc được danh sách tài khoản Claude" in d3 and "state store locked" in d3, "doctor: list lỗi -> báo kèm lý do", d3[-400:])
+# ca THẬT trên Ubuntu 24/11 (OpenClaw 2026.11.8): 'auth list' đòi Gateway TẮT.
+# (a) có 'models status --json' đọc được khi Gateway chạy -> chỉ dừng Gateway 1 lần (lúc ghi token)
+reset5("active", ("anthropic:manual",))
+rc, out = drive(KIT + ["model-backup"], [(r"Dán token", [GOOD2])], dict(E5, FAKE_LIST_OFFLINE="1"))
+lg = [l for l in gwlog() if l]; c = rj()
+ok(rc == 0 and c.get("fake_profiles") == ["anthropic:manual", "anthropic:tk2"] and sum(" stop " in l for l in lg) == 1 and open(GWS).read().strip() == "active", "model-backup: list đòi Gateway tắt, đọc qua models status, dừng Gateway đúng 1 lần", (out[-500:], lg))
+d4 = sh(KIT + ["--tenant", "tc", "doctor"], env=dict(E5, FAKE_LIST_OFFLINE="1")).stdout
+ok("có 2 tài khoản Claude" in d4 and "tk2" in d4, "doctor: list đòi Gateway tắt vẫn đếm được tài khoản qua models status", d4[-400:])
+# (b) status cũng hỏng -> tạm dừng Gateway để đọc (hỏi trước), bật lại, rồi làm tiếp: tổng 2 lần dừng, 2 lần bật, cuối cùng chạy
+reset5("active", ("anthropic:manual",))
+rc, out = drive(KIT + ["model-backup"], [(r"Dán token", [GOOD3])], dict(E5, FAKE_LIST_OFFLINE="1", FAKE_STATUS_FAIL="1"))
+lg = [l for l in gwlog() if l]; c = rj()
+ok(rc == 0 and c.get("fake_profiles") == ["anthropic:manual", "anthropic:tk2"] and sum(" stop " in l for l in lg) == 2 and sum(" start " in l for l in lg) == 2 and open(GWS).read().strip() == "active", "model-backup: list và status đều không đọc được khi Gateway chạy -> dừng/bật để đọc rồi làm tiếp", (out[-600:], lg))
+d5 = sh(KIT + ["--tenant", "tc", "doctor"], env=dict(E5, FAKE_LIST_OFFLINE="1", FAKE_STATUS_FAIL="1")).stdout
+ok("kit model-backup" in d5 and "CANH BAO model" not in d5, "doctor: không đọc được vì Gateway chạy -> chỉ gợi ý, không báo lỗi giả", d5[-400:])
 r = sh(KIT + ["model-backup"], env=E5)
 ok(r.returncode != 0 and "terminal" in (r.stdout + r.stderr), "model-backup: không có terminal thì từ chối (token chỉ nhập ẩn)")
 reset5("active", ("anthropic:manual",)); d1 = sh(KIT + ["--tenant", "tc", "doctor"], env=E5).stdout

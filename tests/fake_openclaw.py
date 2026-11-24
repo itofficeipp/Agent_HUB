@@ -38,8 +38,13 @@ elif a[:2] == ["config", "unset"]:
 elif a[:2] == ["models", "status"]:
     # agent có credential nếu nằm trong cfg["fake_auth"] (list); thừa hưởng được mô phỏng ở phía kit, không ở đây
     ag = a[a.index("--agent") + 1] if "--agent" in a else "main"
+    if "--json" in a:
+        if os.environ.get("FAKE_STATUS_FAIL"): print("Error: status down (fake)", file=sys.stderr); sys.exit(1)
+        labs = [pid + "=token:sk-ant-o...XXXX" for pid in (load().get("fake_profiles") or [])]
+        print(json.dumps({"agentId": ag, "auth": {"providers": [{"provider": "anthropic", "profiles": {"count": len(labs), "labels": labs}}]}})); sys.exit(0)
     sys.exit(0 if ag in (load().get("fake_auth") or []) else 1)
 elif a[:3] == ["models", "auth", "list"]:
+    if os.environ.get("FAKE_LIST_OFFLINE"): need_offline()
     if os.environ.get("FAKE_LIST_FAIL"): print("Error: state store locked (fake)", file=sys.stderr); sys.exit(1)
     prov = opt(a, "--provider"); print("Agent: " + opt(a, "--agent", "main") + "\nAuth state store: ~/.openclaw/state/openclaw.sqlite\nProfiles:")
     for pid in (load().get("fake_profiles") or []):

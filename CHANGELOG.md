@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.16
+- **Nguyên nhân thật** (ảnh Ubuntu 24/11, OpenClaw 2026.11.8): `openclaw models auth list` đòi Gateway TẮT ("requires exclusive offline state ownership"); bản 2026.10.9 trên máy phát triển thì không đòi, nên 0.3.14/0.3.15 báo "không đọc được danh sách tài khoản". Sửa: kit đọc danh sách qua `openclaw models status --json` (chạy được khi Gateway bật; chỉ lấy id profile, không lấy token); nếu cũng không được thì hỏi rồi tạm dừng Gateway vài giây để đọc và bật lại ngay.
+- `kit doctor`: không đọc được vì Gateway chạy thì chỉ gợi ý `kit model-backup`, không báo lỗi giả.
+- Test mới (test_alert 72 ca): openclaw GIẢ biết đòi Gateway tắt cho `auth list`. Vẫn CHƯA thấy kit chạy tới cùng với OpenClaw thật: ghi token/đặt thứ tự thật mới được anh Dũng chạy tay (24/11), chưa qua kit.
+
 ## 0.3.15
 - Sửa sau lần chạy THẬT đầu tiên của `kit model-backup` trên Ubuntu (OpenClaw 2026.11.8): lệnh báo "không đọc được danh sách tài khoản" mà không nói lý do. Giờ kit: thử `auth list` có rồi không có --provider, dùng được dòng profile dù mã thoát khác 0, và IN LÝ DO THẬT (dòng lỗi đầu của openclaw) cả ở model-backup lẫn doctor.
 - `kit update`: sau khi git pull kéo bản mới, tự nạp lại chính nó (trước đây doctor chạy ngay sau pull vẫn in số phiên bản cũ, thiếu kiểm tra mới). Tắt bằng KIT_NO_REEXEC=1.
