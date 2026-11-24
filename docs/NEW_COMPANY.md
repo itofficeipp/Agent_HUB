@@ -1,7 +1,7 @@
 # Thêm một công ty mới (checklist)
 
 0. **Khoá đọc repo (mỗi công ty một khoá, CHỈ ĐỌC).** Chạy `bash install.sh <cty>` trên máy khách: nếu chưa clone được, installer tự tạo khoá riêng `~/.ssh/agent_hub_deploy` và in **khoá công khai** (một dòng `ssh-ed25519 ...`). Quản trị viên thêm dòng đó vào GitHub → repo Agent_HUB → Settings → Deploy keys, đặt tên theo công ty (vd `cty-a`), **KHÔNG tích "Allow write access"**; rồi chạy lại `bash install.sh <cty>`. Khoá riêng không rời máy khách. Công ty ngừng dùng: xoá đúng khoá đó trên GitHub, các công ty khác không bị ảnh hưởng. Chỉ có file install.sh (gửi cho khách) là đủ để bắt đầu.
-1. Máy mới: `install.sh` → `openclaw onboard --install-daemon` (đăng nhập model, Telegram).
+1. Máy mới: `install.sh` (từ 0.3.7 tự cài OpenClaw và thiết lập mặc định không hỏi; không treo ở needrestart). Đăng nhập model bằng token ở bước sau; Telegram cấu hình riêng nếu cần.
 2. `kit init <cty>`; `kit enable base`.
 3. **Mặc định không cần n8n.** Chỉ khi công ty đã có/muốn dùng n8n: `kit enable n8n` sinh docker-compose mẫu (hoặc dùng n8n có sẵn), rồi dùng `AW_BACKEND=n8n` (tạo 2 Data table, xem docs/ARCHITECTURE.md).
 4. `kit enable agent-web`: nơi nhận (`AW_BACKEND`), cổng, **`AW_EXPOSE` (tunnel | port | none) + `AW_PUBLIC_URL`**, Gateway local/SSH, hồ sơ MCP, thống kê token (`AW_STATS`).

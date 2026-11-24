@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.7
+- **install.sh không còn treo/hỏi trên máy Ubuntu mới** (gặp thật khi cài thử trên Ubuntu mới của anh Dũng: treo 20 phút ở "Configuring NodeSource repository"):
+  - Nguyên nhân: hook **needrestart** của apt mở hộp thoại whiptail "Pending kernel upgrade" chờ phím, hộp thoại bị ẩn vì output trình cài bị lọc, apt giữ khoá, các lệnh khác in "Waiting for cache lock". Đã tái hiện đúng hộp thoại trên VM114 (giả lập kernel mới + UI Debconf) và xác nhận **có cấu hình sửa thì apt xong sau 3 giây** (không sửa: treo).
+  - install.sh ghi `/etc/needrestart/conf.d/99-openclaw-kit.conf` (cần sudo, chỉ khi có needrestart, chạy lại an toàn): restart=a, UI stdio, kernelhints=-1, ucodehints=0 (không hộp thoại). Xoá file này để trở lại mặc định.
+  - Chưa thử trên máy có needrestart mặc định tương tác thật (chỉ giả lập bằng cấu hình, Ubuntu 24.04).
+- **install.sh thiết lập OpenClaw mặc định, không hỏi**: gọi trình cài OpenClaw với `--no-onboard`, rồi `openclaw onboard --non-interactive --accept-risk --mode local --flow quickstart --auth-choice skip --skip-channels --skip-skills --skip-search --skip-ui --skip-health --install-daemon` (loopback + token, chưa đăng nhập model; token Claude dán ở bước sau). `KIT_ONBOARD=manual` để tự chạy onboard; `KIT_ONBOARD_DAEMON=no` để không cài service. Bỏ qua nếu đã có `~/.openclaw/openclaw.json`.
+  - Đã thử thật trên VM114 (HOME tạm): onboard không tương tác rc 0, config hợp lệ, agent main được tạo; chạy lại không làm gì thêm. Lệnh onboard có `--install-daemon` đã thử thật trước đó (docs/TESTING.md: Gateway systemd user `active`); **chưa chạy lại nguyên install.sh bản mới kèm service trên máy trắng** (sẽ đè service Gateway của Lab).
+- install.sh tự thêm PATH (`~/.local/bin`, `~/.npm-global/bin`) vào `~/.bashrc` một lần.
+
 ## 0.3.6
 - **Sửa lỗi lượt chat đầu của agent mới**: agent nhân viên tạo qua webhook có kho credential TRỐNG nên báo `No API key found for provider "anthropic"` (phát hiện khi thử thật trên VM114). Thêm tham số **AW_AUTH_OWNER** (mặc định `main`; `none` = tự quản; hoặc id agent đang giữ token): kit đặt `agents.defaults.authInheritance` để mọi agent mới dùng chung credential của agent chủ.
   - Tự đặt khi `kit apply agent-web` (post_apply) và trước khi `provision` tạo agent mới; chạy tay: `kit run agent-web auth-owner`. Chỉ ghi khi chưa đặt; Gateway đã đặt giá trị khác thì giữ nguyên và chỉ cảnh báo; agent chủ chưa tồn tại thì báo LỖI, không ghi. Chạy lại an toàn (idempotent). `main`/`none` không đổi gì.

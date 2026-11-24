@@ -13,8 +13,8 @@ Repo này là **private**; máy mới cần quyền **đọc** (khoá deploy SSH
 git clone git@github.com:itofficeipp/Agent_HUB.git ~/openclaw-kit
 bash ~/openclaw-kit/install.sh                # cài OpenClaw + lệnh 'kit'; không hỏi gì thêm
 
-# 2. Đăng nhập model/Telegram của OpenClaw (một lần)
-openclaw onboard --install-daemon
+# 2. (từ 0.3.7 install.sh đã thiết lập OpenClaw mặc định, không hỏi. Muốn tự chạy wizard: KIT_ONBOARD=manual bash install.sh)
+#    Đăng nhập model bằng token: xem docs/MODEL-AUTH.md
 
 # 3. Cài từng bước CÓ GỢI Ý: kiểm tra máy -> hỏi thông số -> xem trước -> dựng -> kiểm tra
 kit setup congty-abc                          # đổi tên theo công ty; chạy lại bất cứ lúc nào cũng an toàn
