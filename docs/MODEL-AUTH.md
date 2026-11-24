@@ -51,3 +51,7 @@ Kit hỏi token tài khoản 2 (nhập ẩn). Lấy token: đăng nhập ĐÚNG 
 - Làm tay: dừng Gateway; `openclaw models auth paste-token --provider anthropic --agent main --profile-id anthropic:tk2 --expires-in 365d`; `openclaw models auth order set --provider anthropic --agent main anthropic:manual anthropic:tk2`; bật Gateway. Đừng gõ nguyên dấu ngoặc nhọn kiểu <ten-profile> trong lệnh (bash coi là chuyển hướng).
 - Agent nhân viên thừa hưởng credential từ agent chủ qua `authInheritance`: hai token để cùng ở agent chủ. CHƯA kiểm agent nhân viên có theo thứ tự dự phòng.
 - Hai tài khoản nên cùng một chủ/công ty (xem Nguyên tắc 1 ở trên).
+
+## Ghi chú theo bản OpenClaw và Gateway riêng
+- **OpenClaw 2026.11.8 (đã chạy thật trên Ubuntu 25/11/2026):** `models auth list`, `paste-token`, `auth order` đòi Gateway TẮT. `kit model-backup` tự tạm dừng vài giây (hỏi trước) rồi bật lại. Thêm tài khoản thứ hai phải có `--profile-id` (kit đặt `anthropic:tk2`). Bản 2026.10.9 không đòi, nên test trên máy dev không bắt được: luôn thử bản OpenClaw của máy khách.
+- **Công ty có Gateway riêng (kit 0.4.0, docs/MULTI-COMPANY.md):** dùng `kit --tenant <ten> model-backup`. KHÔNG chạy `scripts/claude-login.sh` cho Gateway này (nó ghi vào Gateway mặc định). Tay: thêm `--profile <p>` vào mọi lệnh `openclaw` và dừng/bật `openclaw-gateway-<p>`. Kit không tự sao chép đăng nhập giữa hai Gateway; dùng chung tài khoản Claude thì dán cùng một token, lượt dùng tính chung.

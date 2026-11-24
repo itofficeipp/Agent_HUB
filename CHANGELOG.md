@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.1 - 2026-11-25
+- Sửa lỗi phát hiện khi viết hướng dẫn: `kit setup` không kèm tên (gõ tên ở bước 2) có thể ghi nhầm vào Gateway của tenant đang chọn; nay dừng và bảo chạy `kit setup <tên>` (2 ca test mới). Gợi ý sau `gateway-install` in đúng thứ tự `kit --tenant <t> model-backup` (trước đây `--tenant` đặt sai chỗ).
+- Tài liệu: viết lại hướng dẫn cài đặt thành docs/CAI_DAT.md (từ máy trống đến chạy được, ghi rõ ĐÃ THỬ/CHƯA THỬ, khác biệt OpenClaw 2026.11.8, bảng xử lý lỗi); README, NEW_COMPANY, MODEL-AUTH, UPDATING trỏ về đó.
+
 ## 0.4.0 - 2026-11-25
 - **Gateway OpenClaw riêng cho từng công ty trên cùng một máy.** `kit init <tên> --oc-profile <p> --oc-port <cổng>` tạo tenant có Gateway riêng (thư mục dữ liệu `~/.openclaw-<p>`, dịch vụ `openclaw-gateway-<p>`, cổng riêng, bot Telegram riêng, tài khoản Claude riêng). `kit gateway-install` cài dịch vụ đó (hỏi xác nhận). Tenant cũ KHÔNG đổi gì (không oc.json = Gateway mặc định, tên/đường dẫn như trước).
 - Mọi lệnh openclaw của tenant có profile chạy qua wrapper `tenants/<t>/bin/openclaw` (= `openclaw --profile P`). Lý do: đã kiểm thật OpenClaw 2026.10.9, CLI KHÔNG tôn trọng biến `OPENCLAW_PROFILE` (vẫn đọc ~/.openclaw); chỉ cờ `--profile` đúng.

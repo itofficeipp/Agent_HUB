@@ -6,31 +6,19 @@ Bộ triển khai **OpenClaw** cho nhiều công ty/máy từ một repo. Mỗi 
 
 ## Cài trên máy mới (Linux, user thường, KHÔNG dùng root)
 
-Repo này là **private**; máy mới cần quyền **đọc** (khoá deploy SSH chỉ đọc, riêng cho từng công ty). Cách dễ nhất: chạy `bash install.sh <ten-cong-ty>` — nếu chưa có quyền, installer tự tạo khoá riêng cho máy và in khoá công khai để quản trị viên thêm vào GitHub (Deploy keys, không tích Allow write access), rồi chạy lại (xem docs/NEW_COMPANY.md bước 0). Cách thủ công:
+**Hướng dẫn đầy đủ từng bước (từ máy trống đến chạy được): [docs/CAI_DAT.md](docs/CAI_DAT.md).** Tóm tắt:
 
 ```bash
-# 1. Lấy kit và cài OpenClaw (nếu thiếu)
-git clone git@github.com:itofficeipp/Agent_HUB.git ~/openclaw-kit
-bash ~/openclaw-kit/install.sh                # cài OpenClaw + lệnh 'kit'; không hỏi gì thêm
-
-# 2. (từ 0.3.7 install.sh đã thiết lập OpenClaw mặc định, không hỏi. Muốn tự chạy wizard: KIT_ONBOARD=manual bash install.sh)
-#    Đăng nhập model bằng token: xem docs/MODEL-AUTH.md
-
-# 3. Cài từng bước CÓ GỢI Ý: kiểm tra máy -> hỏi thông số -> xem trước -> dựng -> kiểm tra
-kit setup congty-abc                          # đổi tên theo công ty; chạy lại bất cứ lúc nào cũng an toàn
+bash install.sh congty-abc          # cài OpenClaw + lệnh kit (repo private: lần đầu có thể cần thêm khoá deploy chỉ đọc, installer in hướng dẫn)
+kit setup congty-abc                # hỏi từng thông số có gợi ý, xem trước, dựng, kiểm tra
+kit alert-bot                       # bot Telegram: báo lỗi + chat với agent tổng (token nhập ẩn)
+kit model-backup                    # (khuyên dùng) tài khoản Claude dự phòng
+kit doctor                          # phải "Tất cả OK"
 ```
 
-`kit setup` hỏi từng thông số, mỗi câu có **gợi ý + ví dụ**, nhập sai thì báo và hỏi lại, bí mật nhập ẩn (lưu chmod 600, không vào git), có bản **tóm tắt** trước khi dựng, rồi `apply --dry-run` → `apply` → `doctor` và in **bước tiếp**.
+Công ty thứ hai trên CÙNG máy (Gateway OpenClaw riêng, kit 0.4.0): `kit init <tên> --oc-profile <p> --oc-port <cổng>` rồi `kit --tenant <tên> gateway-install` (mục 8 của docs/CAI_DAT.md, docs/MULTI-COMPANY.md). Không chạy lại `install.sh <tên>` cho công ty thứ hai.
 
-Muốn chạy không hỏi (nhiều công ty, điền sẵn): copy `examples/congty.params.json`, sửa, rồi:
-
-```bash
-kit setup congty-abc --yes --modules base,agent-web --params-file congty-abc.json
-kit setup congty-abc --yes --no-apply ...    # chỉ lưu + xem trước
-kit preflight                                 # chỉ kiểm tra máy
-```
-
-Chạy thủ công từng lệnh (cùng kết quả): `kit init`, `kit enable base`, `kit enable agent-web`, `kit apply --dry-run`, `kit apply`, `kit doctor`.
+Chạy không hỏi (điền sẵn): `kit setup congty-abc --yes --modules base,agent-web --params-file congty-abc.json` (mẫu `examples/congty.params.json`); chỉ kiểm máy: `kit preflight`.
 
 ## Chức năng (module)
 
@@ -55,7 +43,7 @@ Hệ thống web ──POST (Basic + HMAC)──▶ [tunnel/Caddy] ──▶ rec
 
 Ra Internet: [docs/EXPOSE.md](docs/EXPOSE.md) (Cloudflare Tunnel hoặc mở port). Thống kê token: `kit run agent-web stats --in`.
 
-Chi tiết: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Thêm công ty mới: [docs/NEW_COMPANY.md](docs/NEW_COMPANY.md). Cập nhật: [docs/UPDATING.md](docs/UPDATING.md).
+Cài đặt: [docs/CAI_DAT.md](docs/CAI_DAT.md). Chi tiết: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Thêm công ty mới: [docs/NEW_COMPANY.md](docs/NEW_COMPANY.md). Cập nhật: [docs/UPDATING.md](docs/UPDATING.md).
 
 ## Lệnh
 
@@ -65,6 +53,8 @@ Chi tiết: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Thêm công ty mới: 
 | `kit init <tenant> --oc-profile <p> --oc-port <cổng>` | tenant có Gateway OpenClaw RIÊNG trên cùng máy (xem docs/MULTI-COMPANY.md) |
 | `kit gateway-install` | cài dịch vụ Gateway riêng của tenant (hỏi xác nhận) |
 | `kit use <tenant>` | đổi tenant mặc định (hoặc thêm `--tenant <tenant>` vào từng lệnh) |
+| `kit alert-bot` / `alert-bind` / `alert-test` | bot Telegram: nhập token ẩn + ID, gắn làm bot chat của agent tổng, gửi thử |
+| `kit model-backup [--agent A]` | thêm tài khoản Claude dự phòng, đặt thứ tự (tự dừng/bật lại Gateway) |
 | `kit modules` | chức năng, bật/tắt, có bản mới không |
 | `kit enable <module> [--set K=V] [--params-file f.json] [--yes]` | hỏi/nhận tham số, lưu |
 | `kit apply [module] [--dry-run]` | dựng file, systemd, `openclaw config patch` (idempotent) |

@@ -434,6 +434,9 @@ def cmd_setup(a):
         elif len(existing) == 1: t = existing[0]
         else: die("cần tên tenant: kit setup <ten-cong-ty>")
     if not re.fullmatch(r"[a-z0-9][a-z0-9_-]{1,30}", t): die("tên tenant: a-z 0-9 _ - (2-31 ký tự)")
+    want = (oc_meta(t) or {}).get("profile", "") if tdir(t).exists() else ""
+    if want != OC_PROFILE:
+        die(f"tenant '{t}' dùng Gateway khác với tenant đang chọn (profile '{want or 'mặc định'}' so với '{OC_PROFILE or 'mặc định'}'); để khỏi ghi nhầm vào Gateway của công ty kia, chạy lại có kèm tên: kit setup {t}")
     if not tdir(t).exists(): cmd_init(argparse.Namespace(name=t))
     else: set_current(t); print(f"   dùng tenant có sẵn '{t}'")
     st = load_state(t)
@@ -693,7 +696,7 @@ def cmd_gateway_install(a):
     print((r.stdout + r.stderr).strip()[-600:])
     if r.returncode != 0: die("gateway install lỗi (xem trên)")
     print(f"   OK. Kiểm: systemctl --user status {GW_UNIT}   hoặc   openclaw --profile {OC_PROFILE} gateway status")
-    print("   Bước tiếp: kit setup " + t + "  (agent-web, bot, ...), rồi kit model-backup --tenant " + t)
+    print("   Bước tiếp: kit setup " + t + "  (agent-web, bot, ...), rồi kit --tenant " + t + " model-backup")
 
 def cmd_use(a):
     if not tdir(a.name).exists(): die(f"chưa có tenant '{a.name}' (có: {', '.join(sorted(p.name for p in tenants_dir().glob('*'))) or 'không'})")

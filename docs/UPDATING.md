@@ -21,5 +21,6 @@ Quy trình `kit update`: (1) `git pull --ff-only` (2) tuỳ chọn `openclaw upd
 |---|---|
 | 2026.10.9 | Phiên bản kit được viết/kiểm thử lúc đầu (min_openclaw). |
 | 2026.11.7 | Cài bằng install.sh chính thức; `kit setup` + `apply` + receiver (systemd) + webhook 8 ca + tạo agent sandbox + mở công cụ web: chạy đúng. Lưu ý: provider web search `duckduckgo` giờ là plugin ngoài, `kit doctor` báo CANH BAO. Muốn web_search chạy bằng DuckDuckGo: `openclaw plugins install npm:@openclaw/duckduckgo-plugin` (hoặc dùng provider khác: `kit enable agent-web --set AW_SEARCH_PROVIDER=...`). |
+| 2026.11.8 | Ubuntu thật của anh Dũng (25/11/2026): `kit setup`, `model-backup` (đặt thứ tự manual → tk2), `alert-bind` chạy đúng. `models auth list/paste-token/order` đòi Gateway tắt (kit tự xử lý). CHƯA thử cờ `--profile` (Gateway riêng, kit 0.4.0) trên bản này. |
 
 `kit doctor` in các cảnh báo của `openclaw config validate` (dòng `CANH BAO openclaw:`); cảnh báo không làm kit báo lỗi.

@@ -1,5 +1,7 @@
 # Thêm một công ty mới (checklist)
 
+Bản đầy đủ theo thứ tự chạy thật, kèm bảng xử lý lỗi: docs/CAI_DAT.md. Mục dưới đây giữ làm checklist ngắn. Công ty thứ hai trên cùng máy: dùng Gateway riêng (docs/MULTI-COMPANY.md), không chạy `install.sh` với tên công ty mới.
+
 0. **Khoá đọc repo (mỗi công ty một khoá, CHỈ ĐỌC).** Chạy `bash install.sh <cty>` trên máy khách: nếu chưa clone được, installer tự tạo khoá riêng `~/.ssh/agent_hub_deploy` và in **khoá công khai** (một dòng `ssh-ed25519 ...`). Quản trị viên thêm dòng đó vào GitHub → repo Agent_HUB → Settings → Deploy keys, đặt tên theo công ty (vd `cty-a`), **KHÔNG tích "Allow write access"**; rồi chạy lại `bash install.sh <cty>`. Khoá riêng không rời máy khách. Công ty ngừng dùng: xoá đúng khoá đó trên GitHub, các công ty khác không bị ảnh hưởng. Chỉ có file install.sh (gửi cho khách) là đủ để bắt đầu.
 1. Máy mới: `install.sh` (từ 0.3.7 tự cài OpenClaw và thiết lập mặc định không hỏi; không treo ở needrestart). Đăng nhập model bằng token ở bước sau; Telegram cấu hình riêng nếu cần.
 2. `kit init <cty>`; `kit enable base`.

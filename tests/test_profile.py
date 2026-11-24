@@ -124,4 +124,12 @@ open(EL, "w").write("")
 r = sh(KIT + ["--tenant", "d2d", "doctor"]); E = elog()
 ok(E and all(e["profile"] is None for e in E), "doctor d2d: vẫn Gateway mặc định, không --profile", E[:3])
 
+# 8. kit setup (hỏi tên ở bước 2) không được ghi nhầm sang Gateway của tenant đang chọn
+sh(KIT + ["use", "ipp"])
+rc, out = drive(KIT + ["setup"], [(r"Ví dụ: congty-abc", ["d2d"])], ENV, 40)
+ok(rc != 0 and "chạy lại có kèm tên: kit setup d2d" in out, "setup: gõ tên tenant khác Gateway khi đang chọn ipp -> dừng, không ghi nhầm", out[-300:])
+sh(KIT + ["use", "d2d"])
+rc, out = drive(KIT + ["setup"], [(r"Ví dụ: congty-abc", ["ipp"])], ENV, 40)
+ok(rc != 0 and "chạy lại có kèm tên: kit setup ipp" in out, "setup: đang chọn d2d, gõ ipp (Gateway riêng) -> dừng", out[-300:])
+
 print("\nTẤT CẢ PASS (0 lỗi)" if not bad else "\n%d LỖI" % bad); sys.exit(1 if bad else 0)
