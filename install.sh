@@ -66,8 +66,17 @@ clear_failed_unit(){ systemctl --user reset-failed openclaw-gateway.service >/de
 gw_wait_healthy(){ local i; for i in $(seq 1 ${1:-12}); do timeout 10 openclaw gateway health >/dev/null 2>&1 && return 0; sleep 4; done; return 1; }
 GW_FAIL=0
 # Thiết lập OpenClaw mặc định, KHÔNG hỏi: chế độ local, Gateway chỉ nghe loopback + token, bỏ qua đăng nhập model/kênh/skills
-# (token Claude dán ở bước sau). KIT_ONBOARD=manual để tự chạy "openclaw onboard"; KIT_ONBOARD_DAEMON=no để không cài service.
-if [ "${KIT_ONBOARD:-auto}" = auto ] && [ ! -f "$HOME/.openclaw/openclaw.json" ]; then
+# (token Claude dán ở bước sau). KIT_ONBOARD=prompt: chạy wizard "openclaw onboard" có hỏi (cần chạy trong terminal; vẫn cài service + kiểm tra Gateway); KIT_ONBOARD=manual: bỏ qua, tự chạy onboard sau; KIT_ONBOARD_DAEMON=no để không cài service.
+KIT_ONBOARD="${KIT_ONBOARD:-auto}"
+if [ "$KIT_ONBOARD" = prompt ] && [ ! -t 0 ]; then echo "LƯU Ý: KIT_ONBOARD=prompt cần terminal có bàn phím (stdin không phải terminal), chuyển sang thiết lập mặc định."; KIT_ONBOARD=auto; fi
+if [ "$KIT_ONBOARD" = prompt ] && [ ! -f "$HOME/.openclaw/openclaw.json" ]; then
+  say "Chạy wizard OpenClaw (có hỏi)"
+  clear_failed_unit
+  ONB=(openclaw onboard "${GW_PORT_ARGS[@]}")
+  if [ "${KIT_ONBOARD_DAEMON:-yes}" = yes ]; then ONB+=(--install-daemon); else ONB+=(--no-install-daemon); fi
+  "${ONB[@]}" || echo "LƯU Ý: wizard lỗi/bị huỷ (sẽ thử sửa ở bước kiểm tra Gateway bên dưới)"
+fi
+if [ "$KIT_ONBOARD" = auto ] && [ ! -f "$HOME/.openclaw/openclaw.json" ]; then
   say "Thiết lập OpenClaw mặc định (không hỏi)"
   clear_failed_unit
   ONB=(openclaw onboard --non-interactive --accept-risk --mode local --flow quickstart --auth-choice skip --skip-channels --skip-skills --skip-search --skip-ui --skip-health "${GW_PORT_ARGS[@]}")
@@ -75,7 +84,7 @@ if [ "${KIT_ONBOARD:-auto}" = auto ] && [ ! -f "$HOME/.openclaw/openclaw.json" ]
   "${ONB[@]}" </dev/null || echo "LƯU Ý: thiết lập tự động lỗi (sẽ thử sửa ở bước kiểm tra Gateway bên dưới)"
 fi
 # Kiểm tra Gateway THẬT SỰ chạy (trước đây script in 'Xong phần cài' kể cả khi dịch vụ chết).
-if [ "${KIT_ONBOARD:-auto}" = auto ] && [ "${KIT_ONBOARD_DAEMON:-yes}" = yes ]; then
+if [ "$KIT_ONBOARD" != manual ] && [ "${KIT_ONBOARD_DAEMON:-yes}" = yes ]; then
   say "Kiểm tra Gateway"
   if ! gw_wait_healthy 12; then
     echo "Gateway chưa lên, thử sửa dịch vụ một lần (xoá nhãn failed rồi cài lại)..."

@@ -60,7 +60,7 @@ r = sh(KIT + ["doctor"]); print(r.stdout)
 
 # ---- 2. keygen + add-caller + build workflow ----
 r = sh(KIT + ["run", "agent-web", "keygen"]); ok(r.returncode == 0, "keygen", r.stderr + r.stdout)
-r = sh(KIT + ["run", "agent-web", "add-caller", "cty"]); ok(r.returncode == 0 and "password" in r.stdout, "add-caller", r.stderr)
+r = sh(KIT + ["run", "agent-web", "add-caller", "cty"]); ok(r.returncode == 0 and "password" not in r.stdout and os.path.exists(T + "/cfg/tenants/t1/agent-web/secrets/caller-cty.txt") and oct(os.stat(T + "/cfg/tenants/t1/agent-web/secrets/caller-cty.txt").st_mode & 0o777) == "0o600", "add-caller ghi bi mat vao file 600, khong in ra man hinh", r.stderr + r.stdout)
 ok(oct(os.stat(T + "/cfg/tenants/t1/agent-web/users.json").st_mode & 0o777) == "0o600", "users.json chmod 600")
 r = sh(KIT + ["run", "agent-web", "deploy-workflow"]); ok(r.returncode == 0 and "WF123" in r.stdout, "deploy-workflow (n8n giả)", r.stdout + r.stderr)
 w = WF.get("body", {}); ok(len(w.get("nodes", [])) == 11, "workflow co 11 node", len(w.get("nodes", [])))

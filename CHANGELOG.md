@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.10
+- **add-caller không in bí mật ra màn hình nữa**: mật khẩu + HMAC key ghi vào `<tenant>/agent-web/secrets/caller-<ten>.txt` (file chmod 600, thư mục 700); màn hình chỉ in đường dẫn và lệnh xoá (`shred -u`). `--print` để in như cũ. Lý do: bí mật từng lộ qua ảnh chụp màn hình. Test: test_all (file 600, stdout không có "password") và test_local (--print) đều PASS.
+- **install.sh: KIT_ONBOARD=prompt** chạy wizard `openclaw onboard` có hỏi (vẫn cài dịch vụ, chọn cổng trống, kiểm tra Gateway). Không có terminal (stdin không phải tty) thì tự chuyển về thiết lập mặc định. Đã thử thật trên VM114: nhánh không-tty (RC=0, Gateway OK) và nhánh có tty (wizard mở đúng, nhận --gateway-port). CHƯA đi hết wizard tương tác tới cuối.
+
 ## 0.3.9
 - **install.sh kiểm tra Gateway thật sự chạy** (trước đây in "Xong phần cài" kể cả khi dịch vụ chết). Nếu Gateway không lên sau một lần tự sửa: in LỖI kèm lệnh chỉ đọc để xem nguyên nhân và thoát mã 1.
 - **Sửa lỗi SERVICE_DEFINITION_UNKNOWN [inspection-failed]** khi cài dịch vụ Gateway (gặp thật trên máy Ubuntu của anh Dũng). Nguyên nhân tái hiện được trên VM114: unit systemd còn nhãn `failed` (exit 78, do lần chạy trước bị tranh cổng); `gateway uninstall` xoá file nhưng không xoá nhãn. install.sh chạy `systemctl --user reset-failed` + `daemon-reload` trước khi cài. Chỉ xoá nhãn, không dùng --force/sudo.

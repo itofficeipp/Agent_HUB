@@ -342,7 +342,7 @@ def cmd_setup(a):
     ns.dry_run = False; cmd_apply(ns)
     if "agent-web" in mods and ctx_get("AW_BACKEND") == "local":
         if not (tdir(t) / "agent-web" / "gateway_pub.pem").exists() and yesno("\n   Tạo khoá mã hoá trên Gateway (kit run agent-web keygen)?", True, inter): kit_cmd(t, "run", "agent-web", "keygen")
-        if inter and not (tdir(t) / "agent-web" / "users.json").exists() and yesno("\n   Tạo bên gọi webhook đầu tiên (hệ thống web/HRM gọi vào)? Mật khẩu chỉ in 1 lần, hãy lưu ngay", True, inter):
+        if inter and not (tdir(t) / "agent-web" / "users.json").exists() and yesno("\n   Tạo bên gọi webhook đầu tiên (hệ thống web/HRM gọi vào)? Mật khẩu ghi vào file riêng (không in ra màn hình)", True, inter):
             cn = input("   tên bên gọi (vd hrm) [web]: ").strip() or "web"
             kit_cmd(t, "run", "agent-web", "add-caller", cn)
     print("\n== Kiểm tra (kit doctor)")
@@ -350,7 +350,7 @@ def cmd_setup(a):
     print(f"""
 == BƯỚC TIẾP
   1. {"Doctor còn mục LOI: thường là chưa tạo bên gọi hoặc chưa cấu hình tunnel/Caddy (đọc dòng '->' để biết cách sửa)." if nbad else "Doctor: tất cả OK."}
-       kit run agent-web add-caller <ten>        thêm bên gọi (in mật khẩu 1 lần)
+       kit run agent-web add-caller <ten>        thêm bên gọi (mật khẩu ghi vào file 600, không in)
        hướng dẫn đưa ra Internet: {tdir(t)}/agent-web/expose/HUONG_DAN.md
   2. Bật dịch vụ nền khi sẵn sàng (nếu AW_AUTOSTART=no): xem dòng GỢI Ý ở phần dựng phía trên.
   3. Thử webhook đủ các ca: kit run agent-web test-webhook --user <ten> --password <mk> --secret <hmac_key>

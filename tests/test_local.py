@@ -40,7 +40,7 @@ ok(sh(KIT + ["apply"]).stdout.count("không đổi") >= 5, "apply lan 2 idempote
 
 # ---- 2. keygen, add-caller, khởi động receiver ----
 ok(sh(KIT + ["run", "agent-web", "keygen"]).returncode == 0, "keygen")
-r = sh(KIT + ["run", "agent-web", "add-caller", "cty"]); ok("không cần khởi động lại" in r.stdout, "add-caller (local: khong can deploy workflow)", r.stdout)
+r = sh(KIT + ["run", "agent-web", "add-caller", "cty", "--print"]); ok("không cần khởi động lại" in r.stdout, "add-caller (local: khong can deploy workflow)", r.stdout)
 PW = re.search(r"password\s+= (\S+)", r.stdout).group(1); HK = re.search(r"hmac_key\s+= (\S+)", r.stdout).group(1)
 ENV2 = dict(ENV, KIT_TENANT="t2")
 rcv = subprocess.Popen([sys.executable, A + "/orchestrator/receiver.py"], env=ENV2, stderr=open(T + "/receiver.log", "w"), stdout=subprocess.DEVNULL)
