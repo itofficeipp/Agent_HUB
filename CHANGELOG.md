@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.3.8
+- install.sh: tên công ty tự đổi sang chữ thường (D2D -> d2d) và được kiểm tra ngay đầu script, trước khi cài gì (trước đây gõ D2D thì cài xong mới báo lỗi tên tenant). Đã thử thật trên VM114: D2D -> d2d, RC 0, tenant d2d được tạo.
+
 ## 0.3.7
 - **install.sh không còn treo/hỏi trên máy Ubuntu mới** (gặp thật khi cài thử trên Ubuntu mới của anh Dũng: treo 20 phút ở "Configuring NodeSource repository"):
   - Nguyên nhân: hook **needrestart** của apt mở hộp thoại whiptail "Pending kernel upgrade" chờ phím, hộp thoại bị ẩn vì output trình cài bị lọc, apt giữ khoá, các lệnh khác in "Waiting for cache lock". Đã tái hiện đúng hộp thoại trên VM114 (giả lập kernel mới + UI Debconf) và xác nhận **có cấu hình sửa thì apt xong sau 3 giây** (không sửa: treo).
