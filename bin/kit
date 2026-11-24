@@ -17,13 +17,17 @@
   kit run <module> <lệnh> ...    lệnh riêng của module (vd agent-web add-caller)
   kit export-config              xuất cấu hình máy hiện tại đã che bí mật (để xem/đưa vào mẫu)
 """
-import argparse, datetime, getpass, time, json, os, re, secrets, shutil, stat, subprocess, sys
+import argparse, datetime, getpass, shlex, time, json, os, re, secrets, shutil, stat, subprocess, sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 USER_HOME = Path(os.environ.get("KIT_USER_HOME", str(Path.home())))
 CFG = Path(os.environ.get("KIT_HOME", str(USER_HOME / ".config" / "openclaw-kit")))
 OC = os.environ.get("OPENCLAW_BIN", "openclaw")
+# Mỗi tenant có thể có Gateway OpenClaw RIÊNG (profile): tenants/<t>/oc.json = {"profile": "ipp", "port": 19009}.
+# Tenant không có oc.json (vd tenant cũ) dùng Gateway mặc định, mọi tên/đường dẫn như cũ.
+OC_PROFILE = ""; OC_PORT = 0; SFX = ""; GW_UNIT = "openclaw-gateway"
+OC_CFG = USER_HOME / ".openclaw" / "openclaw.json"
 VERSION = (ROOT / "VERSION").read_text().strip()
 
 def die(msg, rc=1):
@@ -32,6 +36,31 @@ def die(msg, rc=1):
 def now(): return datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
 
 # ---------- tenant / params ----------
+def oc_meta(t):
+    try: d = json.loads((CFG / "tenants" / t / "oc.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError): return None
+    return d if isinstance(d, dict) and d.get("profile") else None
+def use_oc(t):
+    """Chọn Gateway OpenClaw của tenant: đặt biến môi trường để MỌI tiến trình con (openclaw, script module) cùng nhắm đúng profile."""
+    global OC_PROFILE, OC_PORT, SFX, GW_UNIT, OC_CFG, OC
+    m = oc_meta(t) if t else None
+    if not m: return
+    OC_PROFILE = str(m["profile"]); OC_PORT = int(m.get("port") or 0); SFX = "-" + OC_PROFILE
+    GW_UNIT = "openclaw-gateway" + SFX
+    OC_CFG = USER_HOME / (".openclaw" + SFX) / "openclaw.json"
+    os.environ["OPENCLAW_PROFILE"] = OC_PROFILE; os.environ["KIT_SFX"] = SFX; os.environ["KIT_OC_CFG"] = str(OC_CFG)
+    if OC_PORT: os.environ["OPENCLAW_GATEWAY_PORT"] = str(OC_PORT)
+    # QUAN TRỌNG: CLI OpenClaw KHÔNG tôn trọng biến OPENCLAW_PROFILE (đã kiểm thật 2026.10.9: vẫn đọc ~/.openclaw). Chỉ cờ --profile mới đúng.
+    # Nên mọi lệnh openclaw của tenant chạy qua wrapper tenants/<t>/bin/openclaw (= openclaw --profile P "$@"), kể cả script module.
+    real = os.environ.get("KIT_OC_REAL") or shutil.which(OC) or OC
+    os.environ["KIT_OC_REAL"] = real
+    w = CFG / "tenants" / t / "bin" / "openclaw"
+    txt = '#!/bin/sh\n# Sinh bởi kit: mọi lệnh openclaw của tenant nhắm Gateway profile "%s". Không sửa tay.\nexec %s --profile %s "$@"\n' % (OC_PROFILE, shlex.quote(real), shlex.quote(OC_PROFILE))
+    w.parent.mkdir(parents=True, exist_ok=True)
+    if not w.exists() or w.read_text() != txt: w.write_text(txt)
+    os.chmod(w, 0o755)
+    OC = str(w); os.environ["OPENCLAW_BIN"] = OC
+    os.environ["PATH"] = str(w.parent) + ":" + os.environ.get("PATH", "")
 def tenants_dir(): return CFG / "tenants"
 def current_tenant(arg):
     if arg: return arg
@@ -89,6 +118,8 @@ def with_deps(names, seen=None):
 
 def default_value(spec):
     d = spec.get("default", "")
+    if isinstance(d, str): d = d.replace("{{KIT_SFX}}", SFX)
+    if spec.get("key") == "AW_LISTEN_PORT" and OC_PORT: return str(int(d or 8787) + OC_PORT - 18789)   # mỗi Gateway riêng một cổng receiver, không đụng nhau
     if isinstance(d, str) and d.startswith("random:hex"):
         return secrets.token_hex(int(d[10:] or 4))
     if isinstance(d, str) and d.startswith("random:token"):
@@ -254,7 +285,7 @@ def collect_params(t, mods, sets, interactive):
 
 def context(t):
     c = {"HOME": str(USER_HOME), "KIT_ROOT": str(ROOT), "TENANT": t, "TENANT_DIR": str(tdir(t)),
-         "OPENCLAW_BIN": OC, "KIT_VERSION": VERSION, "KIT_HOME_DIR": str(CFG)}
+         "OPENCLAW_BIN": OC, "KIT_VERSION": VERSION, "KIT_HOME_DIR": str(CFG), "KIT_SFX": SFX, "OC_PROFILE": OC_PROFILE, "OC_CFG": str(OC_CFG)}
     c.update(load_params(t)); c.update(load_secrets(t))
     from urllib.parse import urlparse
     for k, host_k in (("AW_PUBLIC_URL", "AW_PUBLIC_HOST"), ("N8N_PUBLIC_URL", "N8N_PUBLIC_HOST")):
@@ -272,7 +303,7 @@ def render(text, ctx, where=""):
     return re.sub(r"\{\{([A-Z0-9_]+)\}\}", sub, text)
 
 # ---------- openclaw helpers ----------
-def oc_available(): return shutil.which(OC) is not None
+def oc_available(): return shutil.which(os.environ.get("KIT_OC_REAL") or OC) is not None
 def oc_patch(patch_text, dry):
     if not oc_available():
         print("  ! không thấy openclaw trong PATH — bỏ qua config patch (chạy lại sau khi cài OpenClaw)"); return True
@@ -281,7 +312,7 @@ def oc_patch(patch_text, dry):
     if r.returncode != 0: print(r.stdout + r.stderr); return False
     return True
 def backup_openclaw_config():
-    src = USER_HOME / ".openclaw" / "openclaw.json"
+    src = OC_CFG
     if src.exists():
         dst = CFG / "backups" / f"openclaw.json.{now()}"; dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src, dst); os.chmod(dst, 0o600); return dst
@@ -501,7 +532,6 @@ def cmd_alert_bind(a):
     sys.exit(0 if bind_main_bot(t, tok, tgt, params.get("ASSISTANT_NAME", ""), sys.stdin.isatty()) else 1)
 
 # ---------- tài khoản model DỰ PHÒNG (kit model-backup) ----------
-GW_UNIT = "openclaw-gateway"
 def _gw_active():
     return bool(shutil.which("systemctl")) and run(["systemctl", "--user", "is-active", "--quiet", GW_UNIT]).returncode == 0
 def _gw(action): return run(["systemctl", "--user", action, GW_UNIT])
@@ -627,13 +657,43 @@ def cmd_alert_test(a):
     sys.exit(0 if probe_alert(tok, tgt, interactive=False) else 1)
 
 def cmd_init(a):
-    t = a.name
+    t = a.name; ocp = getattr(a, "oc_profile", None); ocn = getattr(a, "oc_port", None)
     if not re.fullmatch(r"[a-z0-9][a-z0-9_-]{1,30}", t): die("tên tenant: a-z 0-9 _ - (2-31 ký tự)")
+    if ocp:
+        if not re.fullmatch(r"[a-z0-9][a-z0-9-]{1,30}", ocp): die("--oc-profile: a-z 0-9 - (2-31 ký tự)")
+        if ocp in ("default", "main"): die("--oc-profile không được là 'default'/'main' (đó là Gateway mặc định)")
+        if not ocn: die("--oc-profile cần --oc-port (cổng Gateway riêng, vd 19009; cách cổng Gateway khác ít nhất 120)")
+        for o in sorted(p.name for p in tenants_dir().glob("*")):
+            m = oc_meta(o)
+            if o != t and m and (m["profile"] == ocp or abs(int(m.get("port") or 0) - ocn) < 120):
+                die(f"profile/cổng trùng hoặc quá gần tenant '{o}' (profile {m['profile']}, cổng {m.get('port')}); cần cách nhau ≥ 120")
+        if abs(ocn - 18789) < 120: die("cổng quá gần cổng Gateway mặc định 18789; chọn cổng cách ≥ 120, vd 19009")
+        tdir(t).mkdir(parents=True, exist_ok=True); os.chmod(tdir(t), 0o700)
+        write_private(tdir(t) / "oc.json", json.dumps({"profile": ocp, "port": ocn}, indent=1) + "\n")
+    elif ocn: die("--oc-port chỉ dùng cùng --oc-profile")
     tdir(t).mkdir(parents=True, exist_ok=True); os.chmod(tdir(t), 0o700)
     save_params(t, load_params(t)); save_state(t, load_state(t))
     is_cur = set_current(t)
     if not is_cur: print(f"(tenant mặc định vẫn là '{(CFG / 'current').read_text().strip()}'; muốn chuyển sang '{t}': kit use {t}; hoặc thêm --tenant {t} vào lệnh)")
     print(f"Đã tạo tenant '{t}' tại {tdir(t)}\nBước tiếp: kit setup {t}   (hỏi từng bước có gợi ý), hoặc thủ công: kit enable base, kit enable agent-web")
+
+def cmd_gateway_install(a):
+    """Cài dịch vụ Gateway RIÊNG của tenant (openclaw --profile P gateway install --port N). Không đụng Gateway mặc định."""
+    t = current_tenant(a.tenant); m = oc_meta(t)
+    if not m: die(f"tenant '{t}' dùng Gateway mặc định, không có Gateway riêng. Tạo tenant có Gateway riêng: kit init <tên> --oc-profile <p> --oc-port <cổng>")
+    use_oc(t)
+    if not oc_available(): die("không thấy openclaw trong PATH")
+    print(f"== Gateway riêng của tenant '{t}': profile {OC_PROFILE}, cổng {OC_PORT}, dịch vụ {GW_UNIT}, dữ liệu {OC_CFG.parent}")
+    if not a.yes and not yesno("   Cài dịch vụ systemd user mới này (Gateway mặc định không bị đụng)?", False, sys.stdin.isatty()): die("đã dừng, chưa cài gì")
+    if not OC_CFG.exists():
+        print("   Cấu hình chưa có: thiết lập gateway.mode=local cho profile này")
+        r = run([OC, "config", "set", "gateway.mode", '"local"', "--strict-json"])
+        if r.returncode != 0: die("không đặt được gateway.mode: " + (r.stdout + r.stderr).strip()[-300:])
+    r = run([OC, "gateway", "install", "--port", str(OC_PORT)] + (["--force"] if a.force else []), timeout=180)
+    print((r.stdout + r.stderr).strip()[-600:])
+    if r.returncode != 0: die("gateway install lỗi (xem trên)")
+    print(f"   OK. Kiểm: systemctl --user status {GW_UNIT}   hoặc   openclaw --profile {OC_PROFILE} gateway status")
+    print("   Bước tiếp: kit setup " + t + "  (agent-web, bot, ...), rồi kit model-backup --tenant " + t)
 
 def cmd_use(a):
     if not tdir(a.name).exists(): die(f"chưa có tenant '{a.name}' (có: {', '.join(sorted(p.name for p in tenants_dir().glob('*'))) or 'không'})")
@@ -696,7 +756,7 @@ SANDBOX_IMAGE_DEFAULT = "openclaw-sandbox:trixie-slim"   # OpenClaw 2026.11.7 đ
 
 def oc_config():
     """Đọc ~/.openclaw/openclaw.json (JSON). Trả về dict hoặc None nếu không đọc được."""
-    try: return json.loads((USER_HOME / ".openclaw" / "openclaw.json").read_text(encoding="utf-8"))
+    try: return json.loads(OC_CFG.read_text(encoding="utf-8"))
     except Exception: return None
 
 def find_cli_runtime(o, path=""):
@@ -751,12 +811,14 @@ def cmd_doctor(a):
         for l in (r.stdout + r.stderr).splitlines():
             if l.strip().startswith("!"): print("  CANH BAO openclaw: " + l.strip().lstrip("!").strip()[:300])
     else: chk(False, "openclaw", "cài: curl -fsSL https://openclaw.ai/install.sh | bash")
+    if OC_PROFILE:
+        chk(_gw_active(), f"Gateway RIÊNG profile '{OC_PROFILE}' (cổng {OC_PORT}), dịch vụ {GW_UNIT} đang chạy", f"chưa chạy: lần đầu  kit --tenant {t} gateway-install ; sau đó  systemctl --user start {GW_UNIT}")
     sp = tdir(t) / "secrets.env"
     if sp.exists(): chk(stat.S_IMODE(sp.stat().st_mode) == 0o600, "secrets.env chmod 600", f"chmod 600 {sp}")
     st = load_state(t)
     if "agent-web" in st["enabled"]:
         cfg = oc_config()
-        if cfg is None: print("  CANH BAO không đọc được ~/.openclaw/openclaw.json (không kiểm được runtime/sandbox của model)")
+        if cfg is None: print("  CANH BAO không đọc được " + str(OC_CFG) + " (không kiểm được runtime/sandbox của model)")
         else:
             cli = find_cli_runtime(cfg)
             if cli and not os.environ.get("KIT_ALLOW_CLAUDE_CLI"):
@@ -825,8 +887,9 @@ def main():
     p.add_argument("--tenant"); sp = p.add_subparsers(dest="cmd", required=True)
     s = sp.add_parser("setup"); s.add_argument("name", nargs="?"); s.add_argument("--modules", help="vd base,agent-web (mặc định: hỏi)"); s.add_argument("--set", action="append"); s.add_argument("--params-file"); s.add_argument("--yes", action="store_true", help="không hỏi: dùng --set/--params-file/mặc định"); s.add_argument("--no-apply", action="store_true", help="chỉ lưu + xem trước, không dựng"); s.set_defaults(f=cmd_setup)
     s = sp.add_parser("preflight"); s.set_defaults(f=cmd_preflight)
-    s = sp.add_parser("init"); s.add_argument("name"); s.set_defaults(f=cmd_init)
+    s = sp.add_parser("init"); s.add_argument("name"); s.add_argument("--oc-profile", help="Gateway OpenClaw RIÊNG cho tenant này (vd ipp): có thư mục dữ liệu, dịch vụ, cổng riêng"); s.add_argument("--oc-port", type=int, help="cổng Gateway riêng (vd 19009)"); s.set_defaults(f=cmd_init)
     s = sp.add_parser("use"); s.add_argument("name"); s.set_defaults(f=cmd_use)
+    s = sp.add_parser("gateway-install"); s.add_argument("--yes", action="store_true"); s.add_argument("--force", action="store_true"); s.set_defaults(f=cmd_gateway_install)
     s = sp.add_parser("modules"); s.set_defaults(f=cmd_modules)
     s = sp.add_parser("enable"); s.add_argument("module"); s.add_argument("--set", action="append"); s.add_argument("--params-file", help="JSON tham số KHÔNG bí mật (xem examples/)"); s.add_argument("--yes", action="store_true"); s.set_defaults(f=cmd_enable)
     s = sp.add_parser("apply"); s.add_argument("module", nargs="?"); s.add_argument("--dry-run", action="store_true"); s.set_defaults(f=cmd_apply)
@@ -839,6 +902,10 @@ def main():
     s = sp.add_parser("sandbox-image"); s.add_argument("--force", action="store_true"); s.set_defaults(f=cmd_sandbox_image)
     s = sp.add_parser("run"); s.add_argument("module"); s.add_argument("command"); s.add_argument("args", nargs=argparse.REMAINDER); s.set_defaults(f=cmd_run)
     s = sp.add_parser("export-config"); s.add_argument("args", nargs=argparse.REMAINDER); s.set_defaults(f=cmd_export)
-    a = p.parse_args(); a.f(a)
+    a = p.parse_args()
+    tn = a.tenant or (getattr(a, "name", None) if a.cmd in ("init", "setup") else None)
+    if not tn and (CFG / "current").exists(): tn = (CFG / "current").read_text().strip()
+    use_oc(tn)
+    a.f(a)
 
 if __name__ == "__main__": main()

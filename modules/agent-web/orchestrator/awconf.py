@@ -1,5 +1,5 @@
 """Đọc tham số tenant (params.json + secrets.env) cho các script agent-web. Chỉ stdlib."""
-import json, os, subprocess, sys, urllib.request, urllib.parse
+import json, os, shlex, shutil, subprocess, sys, urllib.request, urllib.parse
 HOME = os.path.expanduser("~")
 KIT_HOME = os.environ.get("KIT_HOME", HOME + "/.config/openclaw-kit")
 TENANT = os.environ.get("KIT_TENANT", "")
@@ -8,6 +8,26 @@ if not TENANT:
     except OSError: sys.exit("LOI thieu KIT_TENANT")
 TDIR = f"{KIT_HOME}/tenants/{TENANT}"
 AWDIR = TDIR + "/agent-web"
+# Gateway OpenClaw riêng của tenant (kit init --oc-profile): tên dịch vụ/thư mục có hậu tố -<profile>; tenant cũ: không hậu tố, như trước.
+try: _OC = json.load(open(TDIR + "/oc.json"))
+except (OSError, ValueError): _OC = {}
+PROFILE = _OC.get("profile", ""); SFX = "-" + PROFILE if PROFILE else ""
+OC_CFG = os.path.expanduser("~/.openclaw" + SFX + "/openclaw.json")
+WRAP_DIR = TDIR + "/bin"
+if PROFILE:
+    # CLI OpenClaw không tôn trọng OPENCLAW_PROFILE, chỉ cờ --profile -> mọi lệnh openclaw đi qua wrapper do kit sinh (xem bin/kit use_oc)
+    _real = os.environ.get("KIT_OC_REAL") or shutil.which("openclaw") or "openclaw"
+    _txt = '#!/bin/sh\n# Sinh bởi kit: mọi lệnh openclaw của tenant nhắm Gateway profile "%s". Không sửa tay.\nexec %s --profile %s "$@"\n' % (PROFILE, shlex.quote(_real), shlex.quote(PROFILE))
+    os.makedirs(WRAP_DIR, exist_ok=True)
+    try: _cur = open(WRAP_DIR + "/openclaw").read()
+    except OSError: _cur = None
+    if _cur != _txt: open(WRAP_DIR + "/openclaw", "w").write(_txt)
+    os.chmod(WRAP_DIR + "/openclaw", 0o755)
+    os.environ.update({"OPENCLAW_PROFILE": PROFILE, "KIT_SFX": SFX, "KIT_OC_CFG": OC_CFG, "KIT_OC_REAL": _real, "OPENCLAW_BIN": WRAP_DIR + "/openclaw",
+                       "PATH": WRAP_DIR + ":" + os.environ.get("PATH", "")})
+    if _OC.get("port"): os.environ["OPENCLAW_GATEWAY_PORT"] = str(_OC["port"])
+ENVPFX = ("export PATH=%s OPENCLAW_PROFILE=%s KIT_SFX=%s KIT_OC_CFG=%s KIT_OC_REAL=%s%s; " % (shlex.quote(WRAP_DIR + ":" + os.environ.get("PATH", "")), PROFILE, SFX, shlex.quote(OC_CFG), shlex.quote(_real), (" OPENCLAW_GATEWAY_PORT=%s" % _OC["port"]) if _OC.get("port") else "")) if PROFILE else ""
+STATE = os.path.expanduser("~/.local/state/openclaw-kit-agentweb" + SFX)
 DB = AWDIR + "/data/agent-web.db"   # kho cục bộ khi AW_BACKEND=local
 
 def _load():
@@ -57,6 +77,8 @@ def update(table, f, data):
 # ---- chạy lệnh trên máy Gateway: "local" hoặc user@host qua ssh ----
 def gw(cmd, input=None, timeout=300):
     host = C.get("AW_GATEWAY_SSH", "local")
+    if PROFILE and host != "local": sys.exit("LOI Gateway từ xa (SSH) chưa hỗ trợ Gateway riêng theo profile; dùng Gateway local cho tenant này")
+    cmd = ENVPFX + cmd
     if host == "local": argv = ["bash", "-c", cmd]
     else:
         argv = ["ssh", "-o", "BatchMode=yes"] + (["-i", os.path.expanduser(C["AW_GATEWAY_SSH_KEY"])] if C.get("AW_GATEWAY_SSH_KEY") else []) + [host, cmd]

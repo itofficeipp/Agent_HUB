@@ -62,6 +62,8 @@ Chi tiết: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Thêm công ty mới: 
 | Lệnh | Việc |
 |---|---|
 | `kit init <tenant>` | tạo tenant (mỗi công ty một tenant, có thể nhiều tenant trên một máy); tenant đầu tiên thành mặc định, các tenant sau không đổi mặc định |
+| `kit init <tenant> --oc-profile <p> --oc-port <cổng>` | tenant có Gateway OpenClaw RIÊNG trên cùng máy (xem docs/MULTI-COMPANY.md) |
+| `kit gateway-install` | cài dịch vụ Gateway riêng của tenant (hỏi xác nhận) |
 | `kit use <tenant>` | đổi tenant mặc định (hoặc thêm `--tenant <tenant>` vào từng lệnh) |
 | `kit modules` | chức năng, bật/tắt, có bản mới không |
 | `kit enable <module> [--set K=V] [--params-file f.json] [--yes]` | hỏi/nhận tham số, lưu |

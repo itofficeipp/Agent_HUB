@@ -11,8 +11,9 @@ Dung: mo_cong_cu.py [--dry-run]    In 'OK ...' / 'LOI ...' tung thay doi, cuoi c
 Chi dong vao agent co sandbox.mode=all. Khong tu bat gi khi tuy chon deu tat."""
 import json, os, subprocess, sys
 HOME = os.path.expanduser("~")
-CFG = os.environ.get("AW_OPENCLAW_CFG", HOME + "/.openclaw/openclaw.json")
-OPT = os.environ.get("AW_MO_CONG_CU_FILE", HOME + "/.config/agentweb/mo_cong_cu.json")
+SFX = os.environ.get("KIT_SFX", "")
+CFG = os.environ.get("AW_OPENCLAW_CFG", os.environ.get("KIT_OC_CFG", HOME + "/.openclaw/openclaw.json"))
+OPT = os.environ.get("AW_MO_CONG_CU_FILE", HOME + "/.config/agentweb" + SFX + "/mo_cong_cu.json")
 DRY = "--dry-run" in sys.argv
 try: O = json.load(open(OPT))
 except OSError: O = {}

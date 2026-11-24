@@ -5,8 +5,8 @@ Co lap 2 lop: (1) cong sandbox cua agent CHI mo dung tool cua server minh (alsoA
 (2) deny server cua nguoi khac (de khong ket noi bang token nguoi khac); agent khong sandbox (main...) deny "cty_*".
 Token doc tu ~/.config/agentweb/secrets/mcp_<agent>.token, khong in ra. In 1 dong ket qua: OK/LOI ..."""
 import json, os, re, subprocess, sys
-HOME = os.path.expanduser('~'); CFG = HOME + '/.openclaw/openclaw.json'; SEC = HOME + '/.config/agentweb/secrets'
-PROFILE = os.environ.get('AW_MCP_PROFILE_FILE', HOME + '/.config/agentweb/mcp_profile.json')
+HOME = os.path.expanduser('~'); SFX = os.environ.get('KIT_SFX', ''); CFG = os.environ.get('KIT_OC_CFG', HOME + '/.openclaw/openclaw.json'); SEC = HOME + '/.config/agentweb' + SFX + '/secrets'
+PROFILE = os.environ.get('AW_MCP_PROFILE_FILE', HOME + '/.config/agentweb' + SFX + '/mcp_profile.json')
 try: _P = json.load(open(PROFILE))
 except OSError: print('LOI thieu mcp_profile.json (' + PROFILE + ')'); sys.exit(2)
 PFX = _P.get('server_prefix', 'mcp_')

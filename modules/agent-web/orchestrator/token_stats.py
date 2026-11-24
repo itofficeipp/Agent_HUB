@@ -7,7 +7,7 @@ Dùng: token_stats.py [--ngay YYYY-MM-DD] [--khong-gui] [--in]   (mặc định:
 import argparse, csv, datetime, json, os, subprocess, sys
 import awconf as A
 
-ST = os.path.expanduser("~/.local/state/openclaw-kit-agentweb"); CSV = ST + "/token_stats.csv"
+ST = A.STATE; CSV = ST + "/token_stats.csv"
 FIELDS = ["date", "agent_id", "user_id", "ho_ten", "phong_ban", "input", "output", "cacheRead", "cacheWrite", "totalTokens", "totalCost"]
 def fmt(n): return format(int(n), ",").replace(",", ".")
 

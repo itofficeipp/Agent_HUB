@@ -4,8 +4,9 @@
 #   json: {"agent_id","telegram_user_id","telegram_bot_username","bi_mat":"<base64 RSA-OAEP-SHA256 cua {\"tg\":..,\"mcp\":..}>"}
 # Khong bao gio in token. Ket qua dong cuoi: OK <agent_id> @<bot> | LOI <ma> <mo ta>
 set -euo pipefail; umask 077
-KEY=${AGENTWEB_KEY:-$HOME/.config/agentweb/bi_mat.pem}
-SEC=$HOME/.config/agentweb/secrets; mkdir -p "$SEC"; chmod 700 "$SEC"
+AWD=$HOME/.config/agentweb${KIT_SFX:-}; OCCFG=${KIT_OC_CFG:-$HOME/.openclaw/openclaw.json}
+KEY=${AGENTWEB_KEY:-$AWD/bi_mat.pem}
+SEC=$AWD/secrets; mkdir -p "$SEC"; chmod 700 "$SEC"
 J=$(cat)
 g(){ python3 -c 'import json,sys;v=json.loads(sys.argv[1]).get(sys.argv[2]);print("" if v is None else v)' "$J" "$1"; }
 ID=$(g agent_id); TUID=$(g telegram_user_id); BOT=$(g telegram_bot_username); BM=$(g bi_mat)
@@ -37,7 +38,7 @@ except Exception: print("")' "$R")
 [ -n "$U" ] || { rm -f "$TGF"; die bot_token "Telegram tu choi token (getMe khong ok)" 5; }
 [ "${U,,}" = "${BOT,,}" ] || { rm -f "$TGF"; die bot_username "token thuoc @$U, khong phai @$BOT" 5; }
 # 3) Sao luu config, gan account + binding
-mkdir -p $HOME/.config/agentweb/bk; cp $HOME/.openclaw/openclaw.json $HOME/.config/agentweb/bk/openclaw.json.$(date +%Y%m%d%H%M%S).before-$ID
+mkdir -p $AWD/bk; cp $OCCFG $AWD/bk/openclaw.json.$(date +%Y%m%d%H%M%S).before-$ID
 ACC=$ID
 python3 - "$ACC" "$TGF" "$TUID" "$U" > /tmp/patch_$ID.json <<'PY'
 import json,sys
@@ -61,7 +62,7 @@ openclaw config set bindings "$NB" --strict-json >/dev/null 2>&1 || die bindings
 # 4) Doc lai
 python3 - "$ACC" "$ID" "$TUID" <<'PY' || die doc_lai "config khong dung" 7
 import json,os,sys
-c=json.load(open(os.path.expanduser('~/.openclaw/openclaw.json')))
+c=json.load(open(os.environ.get('KIT_OC_CFG') or os.path.expanduser('~/.openclaw/openclaw.json')))
 acc,ag,uid=sys.argv[1:]
 a=c["channels"]["telegram"]["accounts"][acc]
 assert a["allowFrom"]==[uid] and a["dmPolicy"]=="allowlist" and a["tokenFile"].endswith(".token")

@@ -1,4 +1,4 @@
-# Sinh bởi openclaw-kit (module agent-web). Tắt: systemctl --user disable --now openclaw-kit-agentweb-provision.timer
+# Sinh bởi openclaw-kit (module agent-web). Tắt: systemctl --user disable --now openclaw-kit-agentweb{{KIT_SFX}}-provision.timer
 [Unit]
 Description=openclaw-kit agent-web provision tick (tenant {{TENANT}})
 After=network-online.target

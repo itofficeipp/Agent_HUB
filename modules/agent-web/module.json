@@ -156,7 +156,7 @@
     {
       "key": "AW_GATEWAY_DIR",
       "prompt": "Thư mục script trên Gateway",
-      "default": "~/openclaw-kit-agentweb",
+      "default": "~/openclaw-kit-agentweb{{KIT_SFX}}",
       "pattern": "[~A-Za-z0-9_./-]+",
       "hint": "Thư mục kit đẩy script provision lên Gateway. Cứ Enter.",
       "example": "~/openclaw-kit-agentweb"
@@ -466,32 +466,32 @@
     },
     {
       "src": "templates/receiver.service.in",
-      "dest": "{{HOME}}/.config/systemd/user/openclaw-kit-agentweb-receiver.service",
+      "dest": "{{HOME}}/.config/systemd/user/openclaw-kit-agentweb{{KIT_SFX}}-receiver.service",
       "when": {
         "AW_BACKEND": "local"
       }
     },
     {
       "src": "templates/stats.service.in",
-      "dest": "{{HOME}}/.config/systemd/user/openclaw-kit-agentweb-stats.service",
+      "dest": "{{HOME}}/.config/systemd/user/openclaw-kit-agentweb{{KIT_SFX}}-stats.service",
       "when": {
         "AW_STATS": "yes"
       }
     },
     {
       "src": "templates/stats.timer.in",
-      "dest": "{{HOME}}/.config/systemd/user/openclaw-kit-agentweb-stats.timer",
+      "dest": "{{HOME}}/.config/systemd/user/openclaw-kit-agentweb{{KIT_SFX}}-stats.timer",
       "when": {
         "AW_STATS": "yes"
       }
     },
     {
       "src": "templates/provision.service.in",
-      "dest": "{{HOME}}/.config/systemd/user/openclaw-kit-agentweb-provision.service"
+      "dest": "{{HOME}}/.config/systemd/user/openclaw-kit-agentweb{{KIT_SFX}}-provision.service"
     },
     {
       "src": "templates/provision.timer.in",
-      "dest": "{{HOME}}/.config/systemd/user/openclaw-kit-agentweb-provision.timer"
+      "dest": "{{HOME}}/.config/systemd/user/openclaw-kit-agentweb{{KIT_SFX}}-provision.timer"
     },
     {
       "src": "templates/cloudflared-config.yml.in",
@@ -621,7 +621,7 @@
         "{{TENANT_DIR}}/agent-web/orchestrator/check_listen.py",
         "{{AW_LISTEN_PORT}}"
       ],
-      "hint": "bật: systemctl --user enable --now openclaw-kit-agentweb-receiver.service",
+      "hint": "bật: systemctl --user enable --now openclaw-kit-agentweb{{KIT_SFX}}-receiver.service",
       "when": {
         "AW_BACKEND": "local"
       }
@@ -633,7 +633,7 @@
         "-c",
         "import urllib.request as u;r=u.urlopen('http://127.0.0.1:{{AW_LISTEN_PORT}}/healthz',timeout=5);assert r.status==200"
       ],
-      "hint": "xem log: journalctl --user -u openclaw-kit-agentweb-receiver",
+      "hint": "xem log: journalctl --user -u openclaw-kit-agentweb{{KIT_SFX}}-receiver",
       "when": {
         "AW_BACKEND": "local"
       }

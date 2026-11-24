@@ -1,4 +1,4 @@
-# Sinh bởi openclaw-kit (module agent-web, tenant {{TENANT}}). Tắt: systemctl --user disable --now openclaw-kit-agentweb-receiver.service
+# Sinh bởi openclaw-kit (module agent-web, tenant {{TENANT}}). Tắt: systemctl --user disable --now openclaw-kit-agentweb{{KIT_SFX}}-receiver.service
 [Unit]
 Description=openclaw-kit agent-web receiver (tenant {{TENANT}})
 After=network.target

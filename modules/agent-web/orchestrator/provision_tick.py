@@ -6,7 +6,7 @@
 import datetime, fcntl, hashlib, json, os, subprocess, sys
 import awconf as A
 D = os.path.dirname(os.path.abspath(__file__))
-ST = os.path.expanduser("~/.local/state/openclaw-kit-agentweb"); os.makedirs(ST, exist_ok=True)
+ST = A.STATE; os.makedirs(ST, exist_ok=True)
 LOG, LAST, MANG, DAGHI = ST + "/provision.log", ST + "/loi_cuoi.sha", ST + "/loi_mang.dem", ST + "/loi_da_ghi.sha"
 lk = open(ST + "/tick.lock", "w")
 try: fcntl.flock(lk, fcntl.LOCK_EX | fcntl.LOCK_NB)

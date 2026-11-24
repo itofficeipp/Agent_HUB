@@ -4,7 +4,7 @@ set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 export KIT_HOME KIT_TENANT
 AUTOSTART="${1:-no}"; BACKEND="${2:-local}"; STATS="${3:-no}"
-U=openclaw-kit-agentweb
+U=openclaw-kit-agentweb${KIT_SFX:-}
 python3 "$here/deploy_gateway.py"
 # agent mới cần dùng chung credential (authInheritance); lỗi ở đây không chặn apply, chỉ báo
 python3 "$here/auth_owner.py" || echo "CANH BAO: chưa đặt được authInheritance (xem dòng LOI ở trên; kit doctor sẽ báo tiếp)"

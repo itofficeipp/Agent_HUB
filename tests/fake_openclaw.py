@@ -2,6 +2,9 @@
 """openclaw giả cho test (KHÔNG chạm OpenClaw thật). Cấu hình ở $FAKE_OC_CFG. Chỉ hỗ trợ đúng các lệnh kit/agent-web dùng."""
 import json, os, sys
 CFG = os.environ["FAKE_OC_CFG"]
+a = sys.argv[1:]; PROFILE = None
+if a[:1] == ["--profile"]: PROFILE = a[1]; a = a[2:]          # như CLI thật: chỉ cờ --profile chọn profile (biến OPENCLAW_PROFILE bị bỏ qua)
+if PROFILE: CFG = CFG.replace("/.openclaw/", "/.openclaw-" + PROFILE + "/")
 load = lambda: json.load(open(CFG)) if os.path.exists(CFG) else {}
 def save(c):
     os.makedirs(os.path.dirname(CFG), exist_ok=True); json.dump(c, open(CFG, "w"), indent=1)
@@ -15,7 +18,7 @@ def need_offline():
     if st and os.path.exists(st) and open(st).read().strip() == "active":
         print("Cannot admit models.auth for system/agent credentials in state root: This operation requires exclusive offline state ownership. No local mutation was attempted.", file=sys.stderr); sys.exit(1)
 def opt(a, k, d=None): return a[a.index(k) + 1] if k in a else d
-a = sys.argv[1:]
+if os.environ.get("FAKE_OC_ENVLOG"): open(os.environ["FAKE_OC_ENVLOG"], "a").write(json.dumps({"argv": a, "profile": PROFILE, "port": os.environ.get("OPENCLAW_GATEWAY_PORT"), "cfg": CFG}) + "\n")
 if os.environ.get("FAKE_OC_ARGV"): open(os.environ["FAKE_OC_ARGV"], "a").write(json.dumps(a) + "\n")
 if a[:1] == ["--version"]: print("OpenClaw 0.0.0-fake")
 elif a[:2] == ["config", "set"]:
@@ -66,6 +69,7 @@ elif a[:4] == ["models", "auth", "order", "set"]:
         if rest[i].startswith("--"): i += 2
         else: ids.append(rest[i]); i += 1
     c = load(); c.setdefault("fake_order", {})[opt(a, "--provider")] = ids; save(c); print("Auth profile order override: " + ", ".join(ids))
+elif a[:2] == ["gateway", "install"]: print("Installed systemd service: openclaw-gateway" + ("-" + PROFILE if PROFILE else "") + ".service (fake) port " + str(opt(a, "--port")))
 elif a[:2] == ["config", "validate"]: print("ok" + ("\n2 warning(s):\n  ! plugins.entries.duckduckgo: plugin not installed: duckduckgo" if os.environ.get("FAKE_OC_WARN") else ""))
 elif a[:2] == ["agents", "list"]:
     ents = list(((load().get("agents") or {}).get("entries") or {}))

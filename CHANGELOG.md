@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.0 - 2026-11-25
+- **Gateway OpenClaw riêng cho từng công ty trên cùng một máy.** `kit init <tên> --oc-profile <p> --oc-port <cổng>` tạo tenant có Gateway riêng (thư mục dữ liệu `~/.openclaw-<p>`, dịch vụ `openclaw-gateway-<p>`, cổng riêng, bot Telegram riêng, tài khoản Claude riêng). `kit gateway-install` cài dịch vụ đó (hỏi xác nhận). Tenant cũ KHÔNG đổi gì (không oc.json = Gateway mặc định, tên/đường dẫn như trước).
+- Mọi lệnh openclaw của tenant có profile chạy qua wrapper `tenants/<t>/bin/openclaw` (= `openclaw --profile P`). Lý do: đã kiểm thật OpenClaw 2026.10.9, CLI KHÔNG tôn trọng biến `OPENCLAW_PROFILE` (vẫn đọc ~/.openclaw); chỉ cờ `--profile` đúng.
+- agent-web: unit systemd, thư mục Gateway, thư mục khoá/bí mật, thư mục state đều có hậu tố `-<profile>`; cổng receiver mặc định = 8787 + (cổng Gateway - 18789) nên không đụng tenant cũ. Gateway SSH từ xa chưa hỗ trợ profile (từ chối rõ ràng).
+- Chặn: profile 'default'/'main', cổng cách nhau < 120, profile/cổng trùng tenant khác. `kit doctor` báo dịch vụ Gateway riêng.
+- Test mới `tests/test_profile.py` (47 ca): tenant cũ không đổi, tên unit/khoá/cổng tách biệt, mọi lệnh openclaw nhắm đúng profile, model-backup dừng/bật đúng dịch vụ; fake_openclaw mô phỏng đúng việc bỏ qua biến môi trường.
+- CHƯA thử với Gateway riêng THẬT (chưa cài dịch vụ thật); xem docs/MULTI-COMPANY.md.
+
 ## 0.3.17 - 2026-11-24
 - kit model-backup: khi đã có từ 2 tài khoản thì hỏi "CHỈ đặt thứ tự dự phòng, KHÔNG thêm token mới?" (mặc định có); không đòi token, không thêm tài khoản thứ 3. Gateway dừng/bật lại 1 lần.
 - Nhập token: lọc ký tự điều khiển của terminal khi dán nhanh, nhận token nằm lẫn trong chuỗi dài; khi dán sai báo độ dài và 4 ký tự đầu (không lộ token), nhắc mã xác nhận ở trình duyệt không phải token.
