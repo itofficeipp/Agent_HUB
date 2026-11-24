@@ -3,6 +3,12 @@
 # Dùng:  bash install.sh [tenant]        (chạy bằng user thường, không root)
 set -euo pipefail
 TENANT="${1:-}"
+# Tên công ty: tự đổi sang chữ thường và kiểm tra NGAY (trước khi cài gì), để khỏi cài xong mới báo lỗi.
+if [ -n "$TENANT" ]; then
+  T_LOWER="$(printf '%s' "$TENANT" | tr '[:upper:]' '[:lower:]')"
+  if [ "$T_LOWER" != "$TENANT" ]; then echo "Tên công ty đổi sang chữ thường: $TENANT -> $T_LOWER"; TENANT="$T_LOWER"; fi
+  printf '%s' "$TENANT" | grep -Eq '^[a-z0-9][a-z0-9_-]{1,30}$' || { echo "Tên công ty không hợp lệ: chỉ a-z 0-9 _ - (2-31 ký tự), ví dụ: d2d, congty-abc"; exit 1; }
+fi
 KIT_DIR="${KIT_DIR:-$HOME/openclaw-kit}"
 REPO="${KIT_REPO:-git@github.com:itofficeipp/Agent_HUB.git}"   # repo private: cần khoá deploy/SSH; đổi bằng KIT_REPO=... nếu dùng bản fork
 say(){ printf '\n== %s\n' "$*"; }
