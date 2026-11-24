@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.9
+- **install.sh kiểm tra Gateway thật sự chạy** (trước đây in "Xong phần cài" kể cả khi dịch vụ chết). Nếu Gateway không lên sau một lần tự sửa: in LỖI kèm lệnh chỉ đọc để xem nguyên nhân và thoát mã 1.
+- **Sửa lỗi SERVICE_DEFINITION_UNKNOWN [inspection-failed]** khi cài dịch vụ Gateway (gặp thật trên máy Ubuntu của anh Dũng). Nguyên nhân tái hiện được trên VM114: unit systemd còn nhãn `failed` (exit 78, do lần chạy trước bị tranh cổng); `gateway uninstall` xoá file nhưng không xoá nhãn. install.sh chạy `systemctl --user reset-failed` + `daemon-reload` trước khi cài. Chỉ xoá nhãn, không dùng --force/sudo.
+- **Tự chọn cổng Gateway trống**: thử 18789, 18795, 18805, 18815, 18825 (cần gốc và gốc+2 trống), dùng `onboard --gateway-port`. Nếu 18789 trống nhưng 18790 (sandbox) bận thì chỉ cảnh báo. Đặt OPENCLAW_GATEWAY_PORT để bỏ qua bước này.
+- Đã thử thật trên VM114 (user thường `kt`): máy sạch (cổng 18789 bận -> tự chọn 18795, health OK, RC=0) và Gateway đang dừng (tự sửa, health OK, RC=0).
+- CHƯA thử thật: đường báo lỗi (Gateway không thể lên -> LỖI, thoát mã 1); chưa chạy 0.3.9 trên máy Ubuntu của anh Dũng.
+
 ## 0.3.8
 - install.sh: tên công ty tự đổi sang chữ thường (D2D -> d2d) và được kiểm tra ngay đầu script, trước khi cài gì (trước đây gõ D2D thì cài xong mới báo lỗi tên tenant). Đã thử thật trên VM114: D2D -> d2d, RC 0, tenant d2d được tạo.
 

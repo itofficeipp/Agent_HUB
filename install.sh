@@ -44,13 +44,47 @@ openclaw --version
 # giữ PATH cho các lần đăng nhập sau (chỉ thêm 1 lần)
 case "$(cat "$HOME/.bashrc" 2>/dev/null)" in *".npm-global/bin"*) ;; *)
   printf '\n# openclaw-kit\nexport PATH="$HOME/.local/bin:$HOME/.npm-global/bin:$PATH"\n' >> "$HOME/.bashrc"; echo "Đã thêm PATH vào ~/.bashrc (mở lại terminal để có hiệu lực)";; esac
+# Cổng Gateway: mặc định 18789. Nếu đã có dịch vụ khác giữ cổng đó (vd. container Docker OpenClaw cũ) thì chọn cổng trống khác ngay
+# từ đầu, thay vì cài xong mới thấy Gateway chết với mã 78. Gateway còn dùng cổng gốc+1 (sandbox) và gốc+2 (điều khiển trình duyệt).
+port_busy(){ ss -ltn 2>/dev/null | awk '{print $4}' | grep -Eq "[:.]$1\$"; }
+GW_PORT_ARGS=()
+if [ -z "${OPENCLAW_GATEWAY_PORT:-}" ]; then
+  GW_BASE=""
+  for b in 18789 18795 18805 18815 18825; do
+    if ! port_busy "$b" && ! port_busy $((b+2)); then GW_BASE="$b"; break; fi
+  done
+  [ -n "$GW_BASE" ] || { echo "LỖI: không tìm được cổng trống cho Gateway (đã thử 18789, 18795, 18805, 18815, 18825). Xem: ss -ltnp"; exit 1; }
+  if [ "$GW_BASE" != 18789 ]; then
+    echo "Cổng 18789 (hoặc 18791) đang có dịch vụ khác giữ, dùng cổng Gateway $GW_BASE"; GW_PORT_ARGS=(--gateway-port "$GW_BASE")
+  elif port_busy 18790; then
+    echo "LƯU Ý: cổng 18790 đang có dịch vụ khác giữ (Gateway dùng cổng này cho sandbox); nếu sandbox lỗi, cài lại với OPENCLAW_GATEWAY_PORT=18795"
+  fi
+fi
+# Dịch vụ systemd còn nhãn 'failed' từ lần chạy trước làm 'gateway install' báo SERVICE_DEFINITION_UNKNOWN [inspection-failed]
+# (đã tái hiện + sửa trên VM114): xoá nhãn này trước khi cài. Chỉ xoá nhãn, không đụng dữ liệu.
+clear_failed_unit(){ systemctl --user reset-failed openclaw-gateway.service >/dev/null 2>&1 || true; systemctl --user daemon-reload >/dev/null 2>&1 || true; }
+gw_wait_healthy(){ local i; for i in $(seq 1 ${1:-12}); do timeout 10 openclaw gateway health >/dev/null 2>&1 && return 0; sleep 4; done; return 1; }
+GW_FAIL=0
 # Thiết lập OpenClaw mặc định, KHÔNG hỏi: chế độ local, Gateway chỉ nghe loopback + token, bỏ qua đăng nhập model/kênh/skills
 # (token Claude dán ở bước sau). KIT_ONBOARD=manual để tự chạy "openclaw onboard"; KIT_ONBOARD_DAEMON=no để không cài service.
 if [ "${KIT_ONBOARD:-auto}" = auto ] && [ ! -f "$HOME/.openclaw/openclaw.json" ]; then
   say "Thiết lập OpenClaw mặc định (không hỏi)"
-  ONB=(openclaw onboard --non-interactive --accept-risk --mode local --flow quickstart --auth-choice skip --skip-channels --skip-skills --skip-search --skip-ui --skip-health)
+  clear_failed_unit
+  ONB=(openclaw onboard --non-interactive --accept-risk --mode local --flow quickstart --auth-choice skip --skip-channels --skip-skills --skip-search --skip-ui --skip-health "${GW_PORT_ARGS[@]}")
   if [ "${KIT_ONBOARD_DAEMON:-yes}" = yes ]; then ONB+=(--install-daemon); else ONB+=(--skip-daemon); fi
-  "${ONB[@]}" </dev/null || echo "LƯU Ý: thiết lập tự động lỗi; chạy tay: openclaw onboard --install-daemon"
+  "${ONB[@]}" </dev/null || echo "LƯU Ý: thiết lập tự động lỗi (sẽ thử sửa ở bước kiểm tra Gateway bên dưới)"
+fi
+# Kiểm tra Gateway THẬT SỰ chạy (trước đây script in 'Xong phần cài' kể cả khi dịch vụ chết).
+if [ "${KIT_ONBOARD:-auto}" = auto ] && [ "${KIT_ONBOARD_DAEMON:-yes}" = yes ]; then
+  say "Kiểm tra Gateway"
+  if ! gw_wait_healthy 12; then
+    echo "Gateway chưa lên, thử sửa dịch vụ một lần (xoá nhãn failed rồi cài lại)..."
+    clear_failed_unit
+    openclaw gateway install 2>&1 | tail -5 || true
+    openclaw gateway start 2>&1 | tail -3 || true
+    gw_wait_healthy 8 || GW_FAIL=1
+  fi
+  if [ "$GW_FAIL" = 0 ]; then echo "Gateway đang chạy (health OK)."; fi
 fi
 # Khoá deploy CHỈ ĐỌC, riêng cho máy này (mỗi công ty một khoá): sinh tại chỗ, khoá riêng không rời máy.
 DEPLOY_KEY="${KIT_DEPLOY_KEY:-$HOME/.ssh/agent_hub_deploy}"
@@ -78,6 +112,19 @@ fi
 mkdir -p "$HOME/.local/bin"; ln -sf "$KIT_DIR/bin/kit" "$HOME/.local/bin/kit"
 say "Khởi tạo"
 if [ -n "$TENANT" ]; then "$KIT_DIR/bin/kit" init "$TENANT"; fi
+if [ "$GW_FAIL" = 1 ]; then
+  cat <<EOF
+
+LỖI: kit đã lấy về và tenant đã khởi tạo, nhưng Gateway OpenClaw KHÔNG chạy. CHƯA xong phần cài.
+Xem nguyên nhân (chỉ đọc):
+  systemctl --user show openclaw-gateway.service -p ActiveState,Result,ExecMainStatus
+  journalctl --user -u openclaw-gateway.service -n 25 --no-pager | cut -c1-220
+  ss -ltnp | grep -E ':1878|:1879'
+Gỡ lỗi chính thức:  openclaw gateway uninstall; systemctl --user reset-failed openclaw-gateway.service; openclaw gateway install; openclaw gateway health
+(đừng dùng --force hay sudo để lách; gửi kết quả cho người quản trị kit)
+EOF
+  exit 1
+fi
 cat <<EOF
 
 Xong phần cài. OpenClaw đã được thiết lập mặc định (chưa có đăng nhập model). Bước tiếp:
