@@ -9,6 +9,8 @@
   kit apply [module] [--dry-run] dựng cấu hình/dịch vụ từ mẫu (idempotent)
   kit update [--with-openclaw]   git pull kit + (tuỳ chọn) update OpenClaw + migrations + apply + doctor
   kit doctor [--strict]          kiểm tra môi trường và từng module (gồm sandbox/runtime model); --strict: thoát mã 1 nếu có LỖI
+  kit alert-bot                  nhập/đổi token bot Telegram báo lỗi + ID người nhận (nhập ẩn), gửi thử 1 tin
+  kit alert-test                 gửi thử 1 tin báo lỗi bằng cấu hình đang lưu
   kit sandbox-image [--force]    dựng image Docker sandbox cho agent (OpenClaw không tự dựng)
   kit run <module> <lệnh> ...    lệnh riêng của module (vd agent-web add-caller)
   kit export-config              xuất cấu hình máy hiện tại đã che bí mật (để xem/đưa vào mẫu)
@@ -95,7 +97,9 @@ def cond_ok(item, get):
     """item có thể mang 'when': {KEY: giá trị | [giá trị...]}; chỉ áp dụng khi mọi điều kiện đúng."""
     for k, want in (item.get("when") or {}).items():
         want = want if isinstance(want, list) else [want]
-        if str(get(k) or "") not in [str(w) for w in want]: return False
+        cur = str(get(k) or "")
+        if "*" in want and cur: continue   # "*" = có giá trị bất kỳ (không trống)
+        if cur not in [str(w) for w in want]: return False
     return True
 
 def probe_healthz(url):
@@ -115,6 +119,28 @@ def validate_param(spec, val):
     if val != "" and pat and not re.fullmatch(pat, val):
         return "sai định dạng" + (f" (ví dụ đúng: {spec['example']})" if spec.get("example") else f" (cần khớp {pat})")
     return ""
+
+def tg():
+    """Nạp modules/agent-web/orchestrator/tgalert.py (gửi báo lỗi trực tiếp qua Telegram Bot API)."""
+    d = str(ROOT / "modules" / "agent-web" / "orchestrator")
+    if d not in sys.path: sys.path.insert(0, d)
+    import tgalert; return tgalert
+
+def probe_alert(token, target, interactive=True):
+    """Kiểm token bằng getMe rồi gửi 1 tin thử tới target. Chỉ cảnh báo, không chặn (vẫn lưu tham số).
+    Trả True nếu gửi được. Không bao giờ in token."""
+    T = tg()
+    for _ in range(3):
+        ok, info = T.get_me(token)
+        if not ok: print("    CẢNH BÁO: " + info); return False
+        print(f"    OK token thuộc bot @{info}")
+        ok, msg = T.send(token, target, f"✅ Thử báo lỗi từ kit {VERSION}: nếu đọc được tin này thì khi hệ thống lỗi sẽ có tin báo ở đây.")
+        if ok: print(f"    OK đã gửi tin thử tới ID {target}: mở Telegram xem có tin từ @{info}"); return True
+        print("    CẢNH BÁO: " + msg)
+        if not interactive or ("Start" not in msg and "không thấy ID" not in msg): return False
+        r = input("    Sau khi bấm Start với bot: Enter = thử lại, gõ 'bo' = bỏ qua: ").strip().lower()
+        if r in ("bo", "bỏ", "b", "n", "no"): return False
+    return False
 
 def collect_params(t, mods, sets, interactive):
     params, sec = load_params(t), load_secrets(t)
@@ -146,6 +172,7 @@ def collect_params(t, mods, sets, interactive):
             if err: die(f"{k}: {err}; dùng --set {k}=... hoặc chạy tương tác")
             (sec if is_sec else params)[k] = val
             if val and spec.get("probe") == "healthz" and interactive and not os.environ.get("KIT_NO_PROBE"): probe_healthz(val)
+            if k == "AW_ALERT_BOT_TOKEN" and val and interactive and not os.environ.get("KIT_NO_PROBE"): probe_alert(val, getv("AW_ALERT_TARGET"), True)
     save_params(t, params); save_secrets(t, sec)
     return params, sec
 
@@ -352,9 +379,46 @@ def cmd_setup(a):
   1. {"Doctor còn mục LOI: thường là chưa tạo bên gọi hoặc chưa cấu hình tunnel/Caddy (đọc dòng '->' để biết cách sửa)." if nbad else "Doctor: tất cả OK."}
        kit run agent-web add-caller <ten>        thêm bên gọi (mật khẩu ghi vào file 600, không in)
        hướng dẫn đưa ra Internet: {tdir(t)}/agent-web/expose/HUONG_DAN.md
+       báo lỗi về Telegram: kit alert-bot (nhập token bot + ID, gửi thử); kit alert-test (gửi thử lại)
   2. Bật dịch vụ nền khi sẵn sàng (nếu AW_AUTOSTART=no): xem dòng GỢI Ý ở phần dựng phía trên.
   3. Thử webhook đủ các ca: kit run agent-web test-webhook --user <ten> --password <mk> --secret <hmac_key>
   4. Cập nhật kit về sau: kit update""")
+
+def _alert_cfg(t):
+    c = context(t); return c.get("AW_ALERT_TARGET", ""), c.get("AW_ALERT_BOT_TOKEN", "")
+
+def cmd_alert_bot(a):
+    """Nhập/đổi bot báo lỗi. Token nhập ẩn (không đặt trên dòng lệnh, không hiện lên màn hình)."""
+    t = current_tenant(a.tenant)
+    if not tdir(t).exists(): die(f"chưa có tenant '{t}' (kit setup {t})")
+    if not sys.stdin.isatty(): die("kit alert-bot cần chạy trong terminal (token nhập ẩn, không nhận qua tham số dòng lệnh)")
+    params, sec = load_params(t), load_secrets(t)
+    print(f"== Bot báo lỗi của tenant '{t}'\n   Bot chỉ GỬI tin báo lỗi tới một ID Telegram; không nhận lệnh, không gắn vào agent nào.")
+    print("   1) Tạo bot: nhắn @BotFather, gõ /newbot, nhận token.  2) Mở bot đó trong Telegram, bấm Start.  3) ID của bạn: nhắn @userinfobot.")
+    cur = params.get("AW_ALERT_TARGET", "")
+    for _ in range(5):
+        v = input(f"\n   ID Telegram người nhận (một dãy số){' [' + cur + ']' if cur else ''} > ").strip() or cur
+        if re.fullmatch(r"-?[0-9]{5,15}", v): break
+        print("   ! ID phải là một dãy số (vd 123456789); nhập lại")
+    else: die("ID nhập sai 5 lần")
+    token = sec.get("AW_ALERT_BOT_TOKEN", "")
+    for _ in range(5):
+        v2 = getpass.getpass("   Token bot (nhập ẩn" + ("; Enter = giữ token đang lưu" if token else "") + ") > ").strip() or token
+        if re.fullmatch(r"[0-9]{6,12}:[A-Za-z0-9_-]{30,60}", v2): break
+        print("   ! token có dạng 123456789:AA... do @BotFather cấp; nhập lại")
+    else: die("token nhập sai 5 lần")
+    params["AW_ALERT_TARGET"] = v; params.setdefault("AW_ALERT_CHANNEL", "telegram"); sec["AW_ALERT_BOT_TOKEN"] = v2
+    save_params(t, params); save_secrets(t, sec)
+    print("   Đã lưu (token trong secrets.env, chmod 600). Gửi thử:")
+    ok = probe_alert(v2, v, interactive=True)
+    print("   Kết quả: " + ("ĐÃ GỬI được tin thử." if ok else "CHƯA gửi được tin thử. Đã lưu cấu hình; sửa theo gợi ý ở trên rồi chạy: kit alert-test"))
+    sys.exit(0 if ok else 1)
+
+def cmd_alert_test(a):
+    t = current_tenant(a.tenant); tgt, tok = _alert_cfg(t)
+    if not tgt: die("chưa có ID người nhận (AW_ALERT_TARGET). Chạy: kit alert-bot")
+    if not tok: die("chưa có token bot báo lỗi. Chạy: kit alert-bot")
+    sys.exit(0 if probe_alert(tok, tgt, interactive=False) else 1)
 
 def cmd_init(a):
     t = a.name
@@ -499,6 +563,10 @@ def cmd_doctor(a):
             if r.returncode == 2: print(f"  CANH BAO token model của agent '{eff}' sắp hết hạn: dán token mới (docs/MODEL-AUTH.md)")
             else: chk(r.returncode == 0, f"credential model có ở agent '{eff}' (agent nhân viên mới thừa hưởng)", f"agent '{eff}' CHƯA có token model nên agent mới báo 'No API key found'. Dán: openclaw models auth paste-token --provider anthropic --agent {eff} --expires-in 365d (docs/MODEL-AUTH.md). Token ở agent khác: kit enable agent-web --set AW_AUTH_OWNER=<id agent> rồi kit apply agent-web")
             if want not in ("", "none") and want != eff: print(f"  CANH BAO AW_AUTH_OWNER={want} nhưng Gateway thừa hưởng từ '{eff}'. Chạy: kit run agent-web auth-owner")
+        a_tgt, a_tok = _alert_cfg(t)
+        if not a_tgt: print("  CANH BAO báo lỗi: chưa đặt ID nhận (AW_ALERT_TARGET) nên khi tạo agent lỗi chỉ ghi file log, KHÔNG có tin nhắn. Chạy: kit alert-bot")
+        elif not a_tok: print("  CANH BAO báo lỗi: có ID nhận nhưng chưa có token bot gửi tin; sẽ dùng kênh Telegram của OpenClaw (nếu chưa cấu hình thì không gửi được). Chạy: kit alert-bot")
+        else: print("  OK   báo lỗi Telegram đã cấu hình (bot + ID nhận). Thử gửi: kit alert-test")
         if shutil.which("docker"):
             img = sandbox_image_name(cfg or {})
             if run(["docker", "info"]).returncode == 0:
@@ -542,6 +610,8 @@ def main():
     s = sp.add_parser("apply"); s.add_argument("module", nargs="?"); s.add_argument("--dry-run", action="store_true"); s.set_defaults(f=cmd_apply)
     s = sp.add_parser("update"); s.add_argument("--with-openclaw", action="store_true"); s.set_defaults(f=cmd_update)
     s = sp.add_parser("doctor"); s.add_argument("--strict", action="store_true", help="thoát mã 1 nếu có mục LỖI (mặc định thoát 0)"); s.set_defaults(f=cmd_doctor)
+    s = sp.add_parser("alert-bot"); s.set_defaults(f=cmd_alert_bot)
+    s = sp.add_parser("alert-test"); s.set_defaults(f=cmd_alert_test)
     s = sp.add_parser("sandbox-image"); s.add_argument("--force", action="store_true"); s.set_defaults(f=cmd_sandbox_image)
     s = sp.add_parser("run"); s.add_argument("module"); s.add_argument("command"); s.add_argument("args", nargs=argparse.REMAINDER); s.set_defaults(f=cmd_run)
     s = sp.add_parser("export-config"); s.add_argument("args", nargs=argparse.REMAINDER); s.set_defaults(f=cmd_export)

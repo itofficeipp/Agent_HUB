@@ -61,3 +61,18 @@ def gw(cmd, input=None, timeout=300):
     else:
         argv = ["ssh", "-o", "BatchMode=yes"] + (["-i", os.path.expanduser(C["AW_GATEWAY_SSH_KEY"])] if C.get("AW_GATEWAY_SSH_KEY") else []) + [host, cmd]
     return subprocess.run(argv, input=input, capture_output=True, text=True, timeout=timeout)
+
+# ---- báo lỗi/báo cáo qua Telegram: ưu tiên bot báo lỗi riêng (gửi thẳng Bot API, không cần Gateway), dự phòng openclaw message send ----
+def alert(text, target=None, timeout=60):
+    """Gửi tin tới 'target' (mặc định AW_ALERT_TARGET). Trả (ok, mô tả). Không bao giờ ném lỗi, không in token."""
+    tgt = target or C.get("AW_ALERT_TARGET")
+    if not tgt: return False, "chưa có người nhận (AW_ALERT_TARGET trống)"
+    tok = C.get("AW_ALERT_BOT_TOKEN")
+    if tok:
+        import tgalert
+        return tgalert.send(tok, tgt, text)
+    try:
+        r = subprocess.run([C.get("OPENCLAW_BIN", "openclaw"), "message", "send", "--channel", C.get("AW_ALERT_CHANNEL", "telegram"),
+                            "--target", tgt, "--message", text], capture_output=True, text=True, timeout=timeout)
+    except Exception as e: return False, "openclaw message send: " + str(e)[:120]
+    return (r.returncode == 0), ("đã gửi qua openclaw" if r.returncode == 0 else ((r.stderr or r.stdout).strip()[-160:] or "rc=%s" % r.returncode))

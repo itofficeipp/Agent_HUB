@@ -255,17 +255,32 @@
       "key": "AW_ALERT_CHANNEL",
       "prompt": "Kênh báo lỗi",
       "default": "telegram",
-      "hint": "Kênh gửi cảnh báo lỗi provision. Cứ Enter nếu dùng Telegram.",
+      "hint": "Kênh gửi cảnh báo lỗi provision. Cứ Enter nếu dùng Telegram. Khi bạn nhập token bot báo lỗi ở câu sau, tin gửi thẳng qua Telegram, không cần Gateway.",
       "example": "telegram"
     },
     {
       "key": "AW_ALERT_TARGET",
-      "prompt": "Người/nhóm nhận báo lỗi (chat id; trống = chỉ ghi log)",
+      "prompt": "ID Telegram người nhận báo lỗi (một dãy số; trống = lỗi chỉ ghi vào file log, KHÔNG có tin nhắn nào)",
       "required": false,
       "optional": true,
       "default": "",
-      "hint": "chat id Telegram người/nhóm nhận cảnh báo. Trống = chỉ ghi log, không gửi tin.",
+      "pattern": "-?[0-9]{5,15}",
+      "hint": "Nên điền, nếu không khi lỗi bạn sẽ không biết. Cách lấy ID: trong Telegram nhắn @userinfobot, nó trả về dãy số (nhóm thì dạng -100...). Sau câu này kit hỏi token bot dùng để GỬI tin báo.",
       "example": "123456789"
+    },
+    {
+      "key": "AW_ALERT_BOT_TOKEN",
+      "prompt": "Token bot Telegram dùng để GỬI báo lỗi (nhập ẩn, không hiện trên màn hình; trống = bỏ qua)",
+      "secret": true,
+      "required": false,
+      "optional": true,
+      "default": "",
+      "pattern": "[0-9]{6,12}:[A-Za-z0-9_-]{30,60}",
+      "when": {
+        "AW_ALERT_TARGET": "*"
+      },
+      "hint": "Tạo bot riêng chỉ để báo lỗi: nhắn @BotFather, gõ /newbot, đặt tên, nhận token. Rồi mở bot đó trong Telegram và bấm Start (bot không nhắn trước được cho người chưa Start). Bot này chỉ gửi tin, không nhận lệnh, không gắn vào agent nào. Token lưu chmod 600; kit gửi thử 1 tin ngay để xác nhận. Đổi sau: kit alert-bot.",
+      "example": "dạng 123456789:AA... do @BotFather cấp"
     },
     {
       "key": "AW_STATS",

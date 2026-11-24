@@ -64,9 +64,8 @@ def main():
     tgt = A.C.get("AW_STATS_TARGET")
     if o.inra or not tgt: print(text)
     if tgt and not o.khong_gui:
-        r = subprocess.run([A.C.get("OPENCLAW_BIN", "openclaw"), "message", "send", "--channel", A.C.get("AW_ALERT_CHANNEL", "telegram"),
-                            "--target", tgt, "--message", text], capture_output=True, text=True, timeout=90)
-        if r.returncode != 0: print("LOI gui bao cao:", (r.stderr or r.stdout)[-200:]); return 1
+        okk, why = A.alert(text, target=tgt)
+        if not okk: print("LOI gui bao cao:", why); return 1
         print("OK da gui bao cao toi", tgt)
     return 1 if loi else 0
 sys.exit(main())

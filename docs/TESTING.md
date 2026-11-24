@@ -5,6 +5,8 @@
 
 `python3 tests/test_local.py` (receiver tích hợp, openclaw giả): enable/apply mặc định (local + tunnel), file expose (tunnel/port/none), receiver thật chạy trên cổng ngẫu nhiên: 201/200/409 (replay)/401/403/422/413/404, token không lọt vào phản hồi/log/DB, `bi_mat` giải mã được bằng khoá bí mật Gateway, khoá IP sau 10 lần sai (qua CF-Connecting-IP), provision.py trên SQLite, thống kê token (CSV 600 + gửi báo cáo qua `message send` giả), `kit doctor` (nghe loopback, healthz, địa chỉ công khai giả → báo LỖI), `check_listen` bắt cổng nghe `0.0.0.0`, tenant cũ giữ `AW_BACKEND=n8n`, module n8n sinh compose/.env/expose đúng.
 
+`python3 tests/test_alert.py` (0.3.12, 39 ca, Telegram giả cục bộ): bot báo lỗi (`kit alert-bot`, `alert-test`, hỏi khi enable, doctor, `awconf.alert`, `provision_tick` gửi lại/không lặp). KHÔNG chạm Telegram thật.
+
 Ngoài ra `openclaw config patch --dry-run` của module `base` đã chạy với OpenClaw thật 2026.10.9 (chỉ kiểm schema, không ghi). Định dạng `openclaw gateway usage-cost --agent <id> --days N --json` (dùng cho thống kê token) đã xem trên OpenClaw thật: `{daily:[{date,input,output,cacheRead,cacheWrite,totalTokens,totalCost}],totals}`; riêng việc đếm token của agent người dùng thật **chưa** có dữ liệu để kiểm.
 
 ## ĐÃ THỬ THẬT trên máy thử (Lab) (20/11/2026; Ubuntu 24.04, systemd user, Internet ra được; không dùng dữ liệu/token thật)
