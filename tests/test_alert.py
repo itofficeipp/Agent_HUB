@@ -158,6 +158,49 @@ ok(rc == 0 and not os.path.exists(OCJ) or "telegram" not in (rj().get("channels"
 rc, out = drive(KIT + ["--tenant", "tf", "alert-bot"], [(r"ID Telegram người nhận", ["-1001234567890"]), (r"Token bot", [TOK])], ENV)
 ok("Bỏ qua gắn bot vào agent" in out and not (os.path.exists(OCJ) and "telegram" in (rj().get("channels") or {})), "ID nhóm: bỏ qua gắn bot chat", out[-400:])
 
+# ---- 5c. kit model-backup: tài khoản Claude dự phòng (openclaw GIẢ + systemctl GIẢ: paste-token/order đòi Gateway TẮT như thật) ----
+GWS, GWL, ARGV = H + "/gw.state", H + "/gw.log", H + "/argv.log"
+open(H + "/bin/systemctl", "w").write("#!/bin/sh\necho \"$@\" >> \"$FAKE_GW_LOG\"\ncase \"$2\" in is-active) [ \"$(cat \"$FAKE_GW_STATE\" 2>/dev/null)\" = active ];; stop) echo inactive > \"$FAKE_GW_STATE\";; start) echo active > \"$FAKE_GW_STATE\";; esac\n")
+os.chmod(H + "/bin/systemctl", 0o755)
+E5 = dict(ENV, FAKE_GW_STATE=GWS, FAKE_GW_LOG=GWL, FAKE_OC_ARGV=ARGV, KIT_GW_WAIT="0")
+GOOD2, GOOD3, GOOD4 = ["sk-ant-oat01-" + c * 80 for c in "xyz"]
+def gwlog(): return open(GWL).read().split("\n") if os.path.exists(GWL) else []
+def reset5(state="active", profiles=("anthropic:manual",), order=None):
+    open(GWS, "w").write(state + "\n"); open(GWL, "w").write("")
+    c = rj(); c["fake_profiles"] = list(profiles); c["fake_order"] = {"anthropic": order} if order else {}; json.dump(c, open(OCJ, "w"))
+reset5()
+rc, out = drive(KIT + ["model-backup"], [(r"Dán token", [GOOD2])], E5)
+c = rj(); lg = [l for l in gwlog() if l]
+ok(rc == 0 and c.get("fake_profiles") == ["anthropic:manual", "anthropic:tk2"], "model-backup: thêm tài khoản 2 thành profile anthropic:tk2, giữ tài khoản 1", out[-600:])
+ok((c.get("fake_order") or {}).get("anthropic") == ["anthropic:manual", "anthropic:tk2"], "model-backup: thứ tự tài khoản 1 trước, tài khoản 2 dự phòng", c.get("fake_order"))
+stops = [i for i, l in enumerate(lg) if " stop " in l]; starts = [i for i, l in enumerate(lg) if " start " in l]
+ok(len(stops) == 1 and len(starts) == 1 and stops[0] < starts[0] and open(GWS).read().strip() == "active", "model-backup: dừng Gateway rồi bật lại, cuối cùng đang chạy", lg)
+ok(GOOD2 not in out and GOOD2 not in open(ARGV).read() and "***" not in "x", "model-backup: token không lộ ra màn hình/dòng lệnh", out[-300:])
+ok("đã đọc lại: khớp" in out, "model-backup: đọc lại thứ tự thấy khớp")
+# token dán sai trước (báo rõ), rồi dán có khoảng trắng chen giữa: vẫn nhận; Gateway đang tắt sẵn -> kit không đụng systemctl stop/start
+reset5("inactive", ("anthropic:manual", "anthropic:tk2"), ["anthropic:manual", "anthropic:tk2"])
+rc, out = drive(KIT + ["model-backup"], [(r"Dán token", ["abc", GOOD3[:30] + " " + GOOD3[30:]])], E5)
+c = rj(); lg = [l for l in gwlog() if l]
+ok(rc == 0 and "không phải token" in out and c.get("fake_profiles")[-1] == "anthropic:tk3", "model-backup: token sai báo rõ, dán lại có khoảng trắng thừa vẫn nhận (tk3)", out[-600:])
+ok((c.get("fake_order") or {}).get("anthropic") == ["anthropic:manual", "anthropic:tk2", "anthropic:tk3"], "model-backup: giữ thứ tự cũ, thêm cuối", c.get("fake_order"))
+ok(not any(" stop " in l or " start " in l for l in lg) and open(GWS).read().strip() == "inactive", "model-backup: Gateway vốn tắt thì không bật/tắt hộ", lg)
+# profile đã có -> hỏi ghi đè, mặc định KHÔNG: không đổi gì, không đụng Gateway
+reset5("active", ("anthropic:manual", "anthropic:tk2"), ["anthropic:manual", "anthropic:tk2"])
+rc, out = drive(KIT + ["model-backup", "--profile-id", "anthropic:tk2"], [(r"GHI ĐÈ", [""])], E5)
+ok(rc == 0 and "Giữ nguyên" in out and not any(" stop " in l for l in gwlog()) and rj().get("fake_token_len", {}).get("anthropic:tk2") in (None, 93), "model-backup: profile đã có, mặc định không ghi đè", out[-400:])
+# lưu token lỗi -> báo rõ, vẫn BẬT LẠI Gateway, không đổi profile
+reset5("active")
+rc, out = drive(KIT + ["model-backup"], [(r"Dán token", [GOOD4])], dict(E5, FAKE_PASTE_FAIL="1"))
+lg = [l for l in gwlog() if l]
+ok("CHƯA lưu được token" in out and rj().get("fake_profiles") == ["anthropic:manual"] and open(GWS).read().strip() == "active" and " start " in lg[-1], "model-backup: lưu lỗi vẫn bật lại Gateway, không đổi profile", (out[-500:], lg))
+ok(GOOD4 not in out, "model-backup: nhật ký lỗi không lộ token")
+r = sh(KIT + ["model-backup"], env=E5)
+ok(r.returncode != 0 and "terminal" in (r.stdout + r.stderr), "model-backup: không có terminal thì từ chối (token chỉ nhập ẩn)")
+reset5("active", ("anthropic:manual",)); d1 = sh(KIT + ["--tenant", "tc", "doctor"], env=E5).stdout
+ok("mới có 1 tài khoản Claude" in d1 and "kit model-backup" in d1, "doctor: mới 1 tài khoản -> nhắc thêm dự phòng", d1[-500:])
+reset5("active", ("anthropic:manual", "anthropic:tk2")); d2 = sh(KIT + ["--tenant", "tc", "doctor"], env=E5).stdout
+ok("có 2 tài khoản Claude" in d2, "doctor: có 2 tài khoản -> OK", d2[-500:])
+
 # ---- 6. doctor ----
 def doc(t): return sh(KIT + ["--tenant", t, "doctor"]).stdout
 ok("báo lỗi Telegram đã cấu hình" in doc("tc"), "doctor: có token + ID -> OK")

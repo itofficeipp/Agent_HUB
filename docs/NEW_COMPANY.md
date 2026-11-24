@@ -14,3 +14,7 @@
 9. `kit doctor`.
 
 Ví dụ tham số không bí mật: `examples/congty.params.json` (`kit enable agent-web --params-file examples/congty.params.json`).
+
+
+## Thêm tài khoản Claude dự phòng (tuỳ chọn, 1 phút)
+Sau khi đã có tài khoản Claude chính: `kit model-backup` (hỏi token tài khoản 2, tự dừng/bật lại Gateway, đặt thứ tự dự phòng). Chi tiết: docs/MODEL-AUTH.md. `kit doctor` nhắc nếu mới có 1 tài khoản.

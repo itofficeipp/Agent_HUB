@@ -12,11 +12,12 @@
   kit alert-bot                  nhập/đổi token bot Telegram + ID người nhận (nhập ẩn), gửi thử 1 tin, gắn luôn làm bot chat của agent tổng
   kit alert-test                 gửi thử 1 tin báo lỗi bằng cấu hình đang lưu
   kit alert-bind                 gắn (lại) bot đó làm bot chat của agent tổng (agent mặc định), chỉ ID nhận được nhắn
+  kit model-backup [--agent A]   thêm tài khoản Claude DỰ PHÒNG (token nhập ẩn): tài khoản 1 hết lượt thì tự chuyển qua tài khoản 2; tự dừng/bật lại Gateway, đặt thứ tự
   kit sandbox-image [--force]    dựng image Docker sandbox cho agent (OpenClaw không tự dựng)
   kit run <module> <lệnh> ...    lệnh riêng của module (vd agent-web add-caller)
   kit export-config              xuất cấu hình máy hiện tại đã che bí mật (để xem/đưa vào mẫu)
 """
-import argparse, datetime, getpass, json, os, re, secrets, shutil, stat, subprocess, sys
+import argparse, datetime, getpass, time, json, os, re, secrets, shutil, stat, subprocess, sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -454,6 +455,7 @@ def cmd_setup(a):
   1. {"Doctor còn mục LOI: thường là chưa tạo bên gọi hoặc chưa cấu hình tunnel/Caddy (đọc dòng '->' để biết cách sửa)." if nbad else "Doctor: tất cả OK."}
        kit run agent-web add-caller <ten>        thêm bên gọi (mật khẩu ghi vào file 600, không in)
        hướng dẫn đưa ra Internet: {tdir(t)}/agent-web/expose/HUONG_DAN.md
+       thêm tài khoản Claude dự phòng (tuỳ chọn): kit model-backup (hết hạn mức tài khoản 1 thì tự chuyển tài khoản 2)
        báo lỗi về Telegram: kit alert-bot (nhập token bot + ID, gửi thử); kit alert-test (gửi thử lại)
   2. Bật dịch vụ nền khi sẵn sàng (nếu AW_AUTOSTART=no): xem dòng GỢI Ý ở phần dựng phía trên.
   3. Thử webhook đủ các ca: kit run agent-web test-webhook --user <ten> --password <mk> --secret <hmac_key>
@@ -497,6 +499,86 @@ def cmd_alert_bind(a):
     if not tgt or not tok: die("chưa có ID/token bot báo lỗi. Chạy: kit alert-bot")
     params = load_params(t)
     sys.exit(0 if bind_main_bot(t, tok, tgt, params.get("ASSISTANT_NAME", ""), sys.stdin.isatty()) else 1)
+
+# ---------- tài khoản model DỰ PHÒNG (kit model-backup) ----------
+GW_UNIT = "openclaw-gateway"
+def _gw_active():
+    return bool(shutil.which("systemctl")) and run(["systemctl", "--user", "is-active", "--quiet", GW_UNIT]).returncode == 0
+def _gw(action): return run(["systemctl", "--user", action, GW_UNIT])
+
+def model_profiles(agent, provider="anthropic"):
+    """Các profile đã lưu của nhà cung cấp (đọc 'openclaw models auth list', không in bí mật). Lỗi -> None."""
+    r = run([OC, "models", "auth", "list", "--provider", provider, "--agent", agent], timeout=90)
+    if r.returncode != 0: return None
+    out = []
+    for l in (r.stdout + "\n" + r.stderr).splitlines():
+        m = re.match(r"\s*-\s+(" + re.escape(provider) + r":[^\s\[]+)", l)
+        if m and m.group(1) not in out: out.append(m.group(1))
+    return out
+
+def model_order(agent, provider="anthropic"):
+    """Thứ tự ưu tiên đang đặt (cần Gateway TẮT). Không đọc được/chưa đặt -> []."""
+    r = run([OC, "models", "auth", "order", "get", "--provider", provider, "--agent", agent], timeout=90)
+    if r.returncode != 0: return []
+    out = []
+    for l in r.stdout.splitlines():
+        if "order" in l.lower(): out += re.findall(re.escape(provider) + r":[^\s,\[\]]+", l)
+    return list(dict.fromkeys(out))
+
+def cmd_model_backup(a):
+    """Thêm tài khoản Claude DỰ PHÒNG cho agent tổng: tài khoản 1 hết lượt thì tự chuyển qua tài khoản 2."""
+    if not oc_available(): die("chưa thấy openclaw trong PATH")
+    if not sys.stdin.isatty(): die("kit model-backup cần chạy trong terminal (token nhập ẩn, không nhận qua tham số dòng lệnh)")
+    prov = "anthropic"; agent = a.agent or default_agent_id()
+    have = model_profiles(agent, prov)
+    if have is None: die("không đọc được danh sách tài khoản của agent '" + agent + "' (openclaw models auth list lỗi)")
+    pid = a.profile_id
+    if not pid:
+        pid = prov + ":manual" if not have else next(prov + ":tk" + str(n) for n in range(2, 99) if prov + ":tk" + str(n) not in have)
+    if not re.fullmatch(prov + r":[A-Za-z0-9_.-]{1,40}", pid): die("--profile-id phải dạng " + prov + ":ten (chữ, số, _ . -)")
+    print("== Tài khoản model dự phòng cho agent '" + agent + "'")
+    print("   Đã lưu: " + (", ".join(have) if have else "(chưa có)") + ". Sẽ thêm: " + pid)
+    if not have: print("   ! Chưa có tài khoản nào: token này sẽ là tài khoản CHÍNH (dùng docs/MODEL-AUTH.md để lấy token). Muốn thêm dự phòng sau khi có tài khoản chính: chạy lại lệnh này.")
+    if pid in have and not yesno("   Profile " + pid + " đã có; GHI ĐÈ token cũ bằng token mới?", False, True):
+        print("   Giữ nguyên, không đổi gì."); return
+    print("   Cách lấy token: trên máy có trình duyệt, đăng nhập ĐÚNG tài khoản Claude số 2, chạy:  claude setup-token  (link in ra mở bằng trình duyệt, dán mã về). Token dạng sk-ant-oat01-... chỉ hiện một lần.")
+    tok = ""
+    for _ in range(5):
+        v = re.sub(r"\s+", "", getpass.getpass("\n   Dán token (nhập ẩn; khoảng trắng/xuống dòng thừa được bỏ qua) > "))
+        if re.fullmatch(r"sk-ant-oat01-[A-Za-z0-9_-]{20,}", v): tok = v; break
+        print("   ! chuỗi vừa dán không phải token (phải bắt đầu bằng sk-ant-oat01-). Có thể dán nhầm mã xác nhận ở trình duyệt hoặc thiếu đoạn đầu/cuối; dán lại")
+    if not tok: die("token nhập sai 5 lần")
+    was = _gw_active()
+    if not yesno("\n   Tạm dừng Gateway vài giây để ghi token (OpenClaw bắt buộc), xong tự bật lại. Tiếp tục?", True, True): print("   Đã hủy, chưa đổi gì."); return
+    rc = 1
+    try:
+        if was:
+            r = _gw("stop")
+            if r.returncode != 0: die("không dừng được Gateway: " + (r.stderr or r.stdout).strip()[:300])
+            print("   Gateway đã dừng.")
+        feeder = str(ROOT / "scripts" / "pty_feed.py")
+        for i in range(4):
+            r = subprocess.run([sys.executable, feeder, "token", "--", OC, "models", "auth", "paste-token", "--provider", prov, "--agent", agent, "--profile-id", pid, "--expires-in", "365d"],
+                               input=tok, capture_output=True, text=True, timeout=180)
+            log = (r.stdout or "").replace(tok, "***")
+            if pid in (model_profiles(agent, prov) or []): break
+            if "offline state" in log and i < 3: time.sleep(float(os.environ.get("KIT_GW_WAIT", "3"))); continue
+            print("   CHƯA lưu được token. Nhật ký (đã che token):\n" + "\n".join("     " + l for l in log.strip().splitlines()[-8:]))
+            return
+        after = model_profiles(agent, prov) or []
+        cur = [x for x in model_order(agent, prov) if x in after]
+        first = [x for x in after if x == prov + ":manual"] if not cur else []
+        final = list(dict.fromkeys(cur + first + [x for x in after if x != pid] + [pid]))
+        r = run([OC, "models", "auth", "order", "set", "--provider", prov, "--agent", agent] + final, timeout=90)
+        if r.returncode != 0: print("   CHƯA đặt được thứ tự: " + (r.stderr or r.stdout).strip()[:300] + "\n   Token đã lưu; đặt tay: openclaw models auth order set --provider " + prov + " --agent " + agent + " " + " ".join(final)); return
+        got = model_order(agent, prov); rc = 0 if got == final else 2
+        print("   Đã lưu token và đặt thứ tự: " + " -> ".join(final) + ("  (đã đọc lại: khớp)" if rc == 0 else "  (CẢNH BÁO: đọc lại thấy: " + (", ".join(got) or "không đọc được") + ")"))
+    finally:
+        if was:
+            r = _gw("start"); print("   Gateway " + ("đã bật lại." if r.returncode == 0 else "CHƯA bật lại được: chạy  systemctl --user start " + GW_UNIT))
+    print("   Cách chạy: dùng tài khoản đầu trước; khi bị rate_limit/hết hạn mức, OpenClaw tạm bỏ tài khoản đó theo thời gian nhà cung cấp báo và dùng tài khoản kế; hết hạn thì quay lại. /new chọn lại từ đầu.")
+    print("   Kiểm: openclaw models auth list --agent " + agent)
+    sys.exit(rc)
 
 def cmd_alert_test(a):
     t = current_tenant(a.tenant); tgt, tok = _alert_cfg(t)
@@ -647,6 +729,12 @@ def cmd_doctor(a):
             if r.returncode == 2: print(f"  CANH BAO token model của agent '{eff}' sắp hết hạn: dán token mới (docs/MODEL-AUTH.md)")
             else: chk(r.returncode == 0, f"credential model có ở agent '{eff}' (agent nhân viên mới thừa hưởng)", f"agent '{eff}' CHƯA có token model nên agent mới báo 'No API key found'. Dán: openclaw models auth paste-token --provider anthropic --agent {eff} --expires-in 365d (docs/MODEL-AUTH.md). Token ở agent khác: kit enable agent-web --set AW_AUTH_OWNER=<id agent> rồi kit apply agent-web")
             if want not in ("", "none") and want != eff: print(f"  CANH BAO AW_AUTH_OWNER={want} nhưng Gateway thừa hưởng từ '{eff}'. Chạy: kit run agent-web auth-owner")
+        if oc_available() and ctx.get("AW_GATEWAY_SSH", "local") == "local":
+            try:
+                mp = model_profiles(eff)
+                if mp is not None and len(mp) == 1: print("  CANH BAO model: mới có 1 tài khoản Claude (" + mp[0] + "); hết hạn mức là bot dừng. Thêm dự phòng: kit model-backup")
+                elif mp: print("  OK   model: có " + str(len(mp)) + " tài khoản Claude (" + ", ".join(mp) + "); xem thứ tự: dừng Gateway rồi openclaw models auth order get --provider anthropic --agent main")
+            except Exception: pass
         a_tgt, a_tok = _alert_cfg(t)
         if not a_tgt: print("  CANH BAO báo lỗi: chưa đặt ID nhận (AW_ALERT_TARGET) nên khi tạo agent lỗi chỉ ghi file log, KHÔNG có tin nhắn. Chạy: kit alert-bot")
         elif not a_tok: print("  CANH BAO báo lỗi: có ID nhận nhưng chưa có token bot gửi tin; sẽ dùng kênh Telegram của OpenClaw (nếu chưa cấu hình thì không gửi được). Chạy: kit alert-bot")
@@ -701,6 +789,7 @@ def main():
     s = sp.add_parser("doctor"); s.add_argument("--strict", action="store_true", help="thoát mã 1 nếu có mục LỖI (mặc định thoát 0)"); s.set_defaults(f=cmd_doctor)
     s = sp.add_parser("alert-bot"); s.add_argument("--no-chat", action="store_true", help="chỉ dùng bot để GỬI báo lỗi, không gắn làm bot chat của agent tổng"); s.set_defaults(f=cmd_alert_bot)
     s = sp.add_parser("alert-bind"); s.set_defaults(f=cmd_alert_bind)
+    s = sp.add_parser("model-backup"); s.add_argument("--agent", help="agent nhận tài khoản (mặc định: agent tổng)"); s.add_argument("--profile-id", help="tên profile, vd anthropic:tk2 (mặc định tự chọn)"); s.set_defaults(f=cmd_model_backup)
     s = sp.add_parser("alert-test"); s.set_defaults(f=cmd_alert_test)
     s = sp.add_parser("sandbox-image"); s.add_argument("--force", action="store_true"); s.set_defaults(f=cmd_sandbox_image)
     s = sp.add_parser("run"); s.add_argument("module"); s.add_argument("command"); s.add_argument("args", nargs=argparse.REMAINDER); s.set_defaults(f=cmd_run)

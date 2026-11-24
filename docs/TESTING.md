@@ -1,5 +1,7 @@
 # Kiểm thử — đã làm gì, chưa làm gì
 
+- 0.3.14: `python3 tests/test_alert.py` thêm mục 5c (`kit model-backup`, 14 ca; 66 ca tổng, đều PASS): dừng rồi bật lại Gateway, giữ thứ tự cũ, token sai/có khoảng trắng, không ghi đè mặc định, lưu lỗi vẫn bật lại Gateway, token không lộ, doctor. openclaw/systemctl GIẢ. CHƯA thử qua kit với OpenClaw thật.
+
 ## ĐÃ CHẠY (cục bộ, tất cả PASS; không chạm OpenClaw/n8n/Telegram/Cloudflare thật)
 `python3 tests/test_all.py` (backend n8n: openclaw giả + n8n giả + HOME tạm): kit init/enable/apply/idempotent; `config patch` (giả); secrets.env 600; build workflow 11 node; logic webhook bằng node; mã hoá RSA-OAEP rồi giải mã đúng như gan_kenh.sh; provision.py → create_agent.sh tạo agent + sandbox; gan_mcp.py cô lập A/B/main.
 

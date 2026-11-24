@@ -38,3 +38,16 @@ openclaw config set agents.defaults.authInheritance '{"agentId":"main"}' --stric
 Áp dụng không cần khởi động lại Gateway. Kiểm: gửi một lượt tới agent mới, phải trả lời được và `sandboxed: true`. Hủy: `openclaw config unset agents.defaults.authInheritance`.
 Lưu ý: token dùng chung nghĩa là mọi nhân viên của công ty dùng chung hạn mức tài khoản đó. Muốn tách hạn mức thì `paste-token` riêng cho từng agent.
 
+
+
+## Tài khoản dự phòng (tài khoản 1 hết lượt thì chuyển tài khoản 2)
+Chạy một lệnh (trong terminal, trên máy có OpenClaw):
+```
+kit model-backup            # agent tổng (mặc định); đổi: --agent <id>
+```
+Kit hỏi token tài khoản 2 (nhập ẩn). Lấy token: đăng nhập ĐÚNG tài khoản Claude số 2 trên trình duyệt, chạy `claude setup-token`, dán mã về, copy chuỗi `sk-ant-oat01-...`. Kit tự dừng Gateway, lưu profile `anthropic:tk2` (không đụng profile cũ), đặt thứ tự tài khoản cũ trước rồi dự phòng, đọc lại kiểm, bật lại Gateway. Chạy lại để thêm tài khoản 3 (`tk3`).
+- Cách OpenClaw chạy: dùng tài khoản đầu trước; bị rate_limit/hết hạn mức thì tạm bỏ nó theo thời gian nhà cung cấp báo (cooldown) và dùng tài khoản kế; hết cooldown quay lại. Mỗi phiên chat giữ một tài khoản (giữ bộ nhớ đệm); `/new` chọn lại. Xem: `openclaw models auth list --agent main`.
+- Không có thứ tự thì OpenClaw xoay vòng theo lần dùng, hai tài khoản bị dùng xen kẽ: nên luôn đặt thứ tự (lệnh trên làm sẵn).
+- Làm tay: dừng Gateway; `openclaw models auth paste-token --provider anthropic --agent main --profile-id anthropic:tk2 --expires-in 365d`; `openclaw models auth order set --provider anthropic --agent main anthropic:manual anthropic:tk2`; bật Gateway. Đừng gõ nguyên dấu ngoặc nhọn kiểu <ten-profile> trong lệnh (bash coi là chuyển hướng).
+- Agent nhân viên thừa hưởng credential từ agent chủ qua `authInheritance`: hai token để cùng ở agent chủ. CHƯA kiểm agent nhân viên có theo thứ tự dự phòng.
+- Hai tài khoản nên cùng một chủ/công ty (xem Nguyên tắc 1 ở trên).

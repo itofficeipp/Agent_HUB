@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.14
+- **Mới `kit model-backup`: thêm tài khoản Claude DỰ PHÒNG cho agent tổng** (tài khoản 1 hết lượt/rate_limit thì OpenClaw tự dùng tài khoản 2; hết cooldown thì quay lại tài khoản 1). Một lệnh thay cho chuỗi lệnh tay anh Dũng đã chạy trên Ubuntu 24/11:
+  - Hỏi token (nhập ẩn, bỏ khoảng trắng/xuống dòng thừa, kiểm dạng `sk-ant-oat01-...` trước khi dùng, dán sai thì báo nguyên nhân thường gặp).
+  - Tự dừng Gateway nếu đang chạy (OpenClaw đòi tắt để ghi credential), lưu token thành profile mới `anthropic:tk2` (hoặc tk3...; KHÔNG ghi đè profile cũ, đã có thì hỏi, mặc định không), đặt thứ tự `auth order` (tài khoản cũ trước, mới sau, giữ thứ tự đang có), đọc lại kiểm, rồi LUÔN bật lại Gateway (kể cả khi lỗi); Gateway vốn tắt thì không bật hộ.
+  - Token đi qua pty (`scripts/pty_feed.py`, đã dùng thật từ 0.3.11), không nằm trên dòng lệnh; nhật ký lỗi che token.
+  - `kit doctor`: mới 1 tài khoản thì nhắc `kit model-backup`; từ 2 tài khoản thì báo OK. `kit setup` nhắc ở BƯỚC TIẾP.
+  - Test mới trong `tests/test_alert.py` mục 5c (14 ca; openclaw GIẢ biết đòi Gateway tắt như thật + systemctl GIẢ). **CHƯA chạy qua kit với OpenClaw thật.** Các lệnh tương đương anh Dũng đã chạy tay trên Ubuntu 24/11 (paste-token --profile-id anthropic:tk2 OK; order set OK; order get in "Auth profile order override: anthropic:manual, anthropic:tk2"). Định dạng in của auth list/order get lấy theo ảnh chụp thật; nếu bản OpenClaw khác in khác, kit báo "CHƯA đặt được thứ tự" kèm lệnh đặt tay.
+  - Chưa chứng minh chuyển tài khoản THẬT khi tài khoản 1 hết lượt (mới biết LyLy trả lời bằng model thật lúc tài khoản 1 đang cooldown).
+
 ## 0.3.13
 - **Token bot Telegram nhập lúc cài đặt nay dùng luôn cho AGENT TỔNG (agent mặc định).** Trước đây bot chỉ gửi báo lỗi; anh Dũng muốn bot đó cũng là bot chat của trợ lý tổng (tên đặt lúc cài, vd LyLy) và ID nhận báo lỗi là ID quản trị tối cao. Trước đó anh phải gõ tay vài nhóm lệnh (config patch, agents bind, set-identity).
   - `kit alert-bot` và câu hỏi token trong `kit setup`/`kit enable agent-web`: sau khi lưu token, kit tự (1) ghi token vào `tenants/<t>/telegram-main.token` chmod 600 (không vào openclaw.json), (2) `channels.telegram`: tokenFile, `dmPolicy: allowlist`, `allowFrom` gồm ID nhận, `groupPolicy: disabled` (chỉ khi chưa đặt), (3) `commands.ownerAllowFrom` thêm `telegram:<ID>` (chủ sở hữu bot), (4) `openclaw agents bind --agent <agent mặc định> --bind telegram:default`, (5) `openclaw agents set-identity --name <ASSISTANT_NAME>`. Sao lưu openclaw.json trước khi ghi. Chạy lại không nhân đôi.
